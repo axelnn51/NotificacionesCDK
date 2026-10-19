@@ -1,0 +1,29 @@
+{
+  "name": "pedidos-cdkeysperu",
+  "version": "1.0.0",
+  "description": "Bot de Telegram para notificaciones en tiempo real de pedidos de CDKeysPeru y monitoreo/apagado remoto de PC",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test-wc": "node src/scripts/test-wc.js",
+    "test-tg": "node src/scripts/test-tg.js"
+  },
+  "keywords": [
+    "woocommerce",
+    "telegram",
+    "bot",
+    "notifications",
+    "cdkeysperu",
+    "portainer"
+  ],
+  "author": "Axel Gomez",
+  "license": "ISC",
+  "dependencies": {
+    "@woocommerce/woocommerce-rest-api": "^1.0.2",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "telegraf": "^4.16.3"
+  }
+}

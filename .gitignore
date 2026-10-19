@@ -1,0 +1,52 @@
+# ==========================================
+# SEGURIDAD CRÍTICA: Ignorar credenciales y secretos
+# ==========================================
+.env
+.env.*
+.env.local
+.env.production
+.env.staging
+!.env.example
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Persistencia local y datos de ejecución
+data/
+*.sqlite
+*.sqlite3
+*.db
+orders_state.json
+
+# Logs y volcados de depuración
+logs/
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# Agente PC (si se usa con env local o config local)
+pc-agent/.env
+pc-agent/.env.*
+!pc-agent/.env.example
+pc-agent/config.json
+pc-agent/config.*.json
+!pc-agent/config.example.json
+pc-agent/node_modules/
+pc-agent/logs/
+
+# Archivos del Sistema Operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDEs y Editores
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace

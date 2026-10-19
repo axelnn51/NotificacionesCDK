@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  pedidos-bot:
+    build: .
+    image: pedidos-cdkeysperu:latest
+    container_name: pedidos-cdkeysperu
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3005}:${PORT:-3005}"
+    volumes:
+      - ./data:/app/data
+    environment:
+      # --- Configuración del Servidor ---
+      - NODE_ENV=production
+      - TZ=America/Lima
+      - PORT=${PORT:-3005}
+
+      # --- Telegram Bot ---
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ADMIN_CHAT_ID=${ADMIN_CHAT_ID}
+
+      # --- WooCommerce (Solo Lectura) ---
+      - WC_URL=${WC_URL:-https://cdkeysperu.com}
+      - WC_CONSUMER_KEY=${WC_CONSUMER_KEY}
+      - WC_CONSUMER_SECRET=${WC_CONSUMER_SECRET}
+      - POLL_INTERVAL_SECONDS=${POLL_INTERVAL_SECONDS:-30}
+      - POLL_BATCH_SIZE=${POLL_BATCH_SIZE:-20}
+      - WC_WEBHOOK_SECRET=${WC_WEBHOOK_SECRET}
+
+      # --- Agente PC ---
+      - PC_AGENT_TOKEN=${PC_AGENT_TOKEN}
+      - PC_OFFLINE_THRESHOLD_SECONDS=${PC_OFFLINE_THRESHOLD_SECONDS:-35}
+
+      # --- Directorio de Persistencia ---
+      - DATA_DIR=/app/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

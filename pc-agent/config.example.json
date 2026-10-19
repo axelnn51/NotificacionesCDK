@@ -1,0 +1,5 @@
+{
+  "serverUrl": "http://IP_DE_TU_SERVIDOR:3005",
+  "token": "TU_TOKEN_SECRETO_AQUI",
+  "heartbeatIntervalSeconds": 5
+}
