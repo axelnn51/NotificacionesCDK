@@ -2,6 +2,7 @@ const express = require('express');
 const config = require('../../config');
 const store = require('../../services/store');
 const telegram = require('../../bot/telegram');
+const formatters = require('../../bot/formatters');
 
 const router = express.Router();
 
@@ -56,12 +57,28 @@ router.post('/ack', requirePcToken, async (req, res) => {
   if (acknowledged) {
     console.log(`[PC] Comando #${commandId} confirmado por el agente (${status}: ${message || ''})`);
     if (status === 'executing' || status === 'shutdown_initiated') {
+      const pcStatus = store.getPcStatus();
       await telegram.broadcast(
         `🔌 <b>CONFIRMACIÓN DE APAGADO DE PC</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━━━\n` +
         `El agente de Windows ha recibido la orden y ha iniciado el protocolo de apagado del equipo.\n` +
         `<i>El sistema se desconectará en breve.</i>`
       );
+
+      // A los 12 segundos (tiempo de apagado forzado), enviar confirmación automática
+      setTimeout(async () => {
+        try {
+          const currentStatus = store.getPcStatus();
+          await telegram.broadcast(
+            `🔴 <b>PC APAGADA TOTALMENTE</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `✅ El equipo (<code>${formatters.escapeHtml(currentStatus.hostname || 'PC')}</code>) ha finalizado el apagado y ya no responde en la red.\n` +
+            `<i>Estado actual: Apagado / Desconectado.</i>`
+          );
+        } catch (e) {
+          console.error('[PC] Error enviando notificación de confirmación de apagado:', e.message);
+        }
+      }, 12000);
     }
   }
 

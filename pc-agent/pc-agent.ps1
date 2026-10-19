@@ -92,15 +92,15 @@ while ($true) {
                 $ackObj = @{
                     commandId = $cmdId
                     status = "shutdown_initiated"
-                    message = "Windows ejecutando shutdown /s /t 10"
+                    message = "Windows ejecutando shutdown /s /f /t 5"
                 }
                 $ackBody = $ackObj | ConvertTo-Json
                 try {
                     Invoke-RestMethod -Uri "$ServerUrl/api/pc/ack" -Method Post -Headers $Headers -Body $ackBody -TimeoutSec 5 -ErrorAction SilentlyContinue
                 } catch {}
 
-                # Ejecutar shutdown
-                & shutdown.exe /s /t 10 /c "Apagado remoto solicitado desde Telegram Bot CDKeysPeru"
+                # Ejecutar shutdown forzado en 5 segundos
+                & shutdown.exe /s /f /t 5 /c "Apagado remoto solicitado desde Telegram Bot CDKeysPeru"
                 break
             }
         }

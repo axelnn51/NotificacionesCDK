@@ -85,12 +85,12 @@ async function loop() {
           body: JSON.stringify({
             commandId: data.commandId,
             status: 'shutdown_initiated',
-            message: 'Windows ejecutando shutdown /s /t 10'
+            message: 'Windows ejecutando shutdown /s /f /t 5'
           })
         }).catch(() => {});
 
-        // Ejecutar apagado de Windows
-        exec('shutdown /s /t 10 /c "Apagado remoto solicitado desde Telegram Bot CDKeysPeru"', (err) => {
+        // Ejecutar apagado forzado de Windows en 5 segundos
+        exec('shutdown /s /f /t 5 /c "Apagado remoto solicitado desde Telegram Bot CDKeysPeru"', (err) => {
           if (err) console.error('Error ejecutando shutdown:', err);
         });
 

@@ -18,7 +18,9 @@ class Store {
       pendingCommand: null,
       commandId: null,
       commandIssuedAt: 0,
-      lastAck: null
+      lastAck: null,
+      shuttingDown: false,
+      shuttingDownAt: 0
     };
 
     this._ensureDir();
@@ -169,6 +171,8 @@ class Store {
 
   updatePcHeartbeat(data = {}) {
     this.pc.lastHeartbeat = Date.now();
+    this.pc.shuttingDown = false;
+    this.pc.shuttingDownAt = 0;
     if (data.hostname) this.pc.hostname = data.hostname;
     if (data.platform) this.pc.platform = data.platform;
     if (typeof data.uptimeSeconds === 'number') this.pc.uptimeSeconds = data.uptimeSeconds;
@@ -178,6 +182,7 @@ class Store {
   }
 
   isPcOnline(thresholdSeconds = config.pcAgent.offlineThresholdSeconds) {
+    if (this.pc.shuttingDown) return false;
     if (!this.pc.lastHeartbeat) return false;
     const diffSeconds = (Date.now() - this.pc.lastHeartbeat) / 1000;
     return diffSeconds <= thresholdSeconds;
@@ -186,6 +191,7 @@ class Store {
   getPcStatus() {
     return {
       online: this.isPcOnline(),
+      shuttingDown: Boolean(this.pc.shuttingDown),
       hostname: this.pc.hostname,
       platform: this.pc.platform,
       uptimeSeconds: this.pc.uptimeSeconds,
@@ -201,6 +207,10 @@ class Store {
     this.pc.pendingCommand = command;
     this.pc.commandId = commandId;
     this.pc.commandIssuedAt = Date.now();
+    if (command === 'shutdown') {
+      this.pc.shuttingDown = true;
+      this.pc.shuttingDownAt = Date.now();
+    }
     this._savePc();
     return { commandId, command };
   }
@@ -221,6 +231,11 @@ class Store {
         time: Date.now(),
         result
       };
+      if (result.status === 'shutdown_initiated' || result.status === 'executing') {
+        this.pc.shuttingDown = true;
+        this.pc.shuttingDownAt = Date.now();
+        this.pc.lastHeartbeat = 0; // Se marca apagada al instante
+      }
       this._savePc();
       return true;
     }

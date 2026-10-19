@@ -34,7 +34,7 @@ const config = {
   // Agente PC (Monitoreo y Apagado)
   pcAgent: {
     token: process.env.PC_AGENT_TOKEN || 'cdkeys-pc-default-secret-token',
-    offlineThresholdSeconds: parseInt(process.env.PC_OFFLINE_THRESHOLD_SECONDS, 10) || 35
+    offlineThresholdSeconds: parseInt(process.env.PC_OFFLINE_THRESHOLD_SECONDS, 10) || 20
   },
 
   // Directorio de persistencia

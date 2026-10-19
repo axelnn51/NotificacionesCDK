@@ -209,10 +209,23 @@ const formatStatusChange = (order, oldStatus) => formatOrderNotification(order, 
  */
 function formatPcStatus(pcState) {
   const isOnline = Boolean(pcState.online);
+  const isShuttingDown = Boolean(pcState.shuttingDown);
   const hostname = pcState.hostname || 'DESKTOP';
   const localIp = pcState.localIp || 'N/A';
   const uptime = formatUptime(pcState.uptimeSeconds);
   const timeAgo = formatTimeAgo(pcState.lastHeartbeat);
+
+  if (isShuttingDown) {
+    return (
+      `💻 <b>ESTADO DE MI EQUIPO (PC)</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `🟠 <b>ESTADO:</b> <b>APAGÁNDOSE...</b>\n\n` +
+      `🏷️ <b>Nombre:</b> <code>${escapeHtml(hostname)}</code>\n` +
+      `⏳ <b>Detalle:</b> Orden de apagado ejecutada en Windows.\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `<i>El equipo está cerrando Windows y se desconectará en breve.</i>`
+    );
+  }
 
   if (isOnline) {
     return (
