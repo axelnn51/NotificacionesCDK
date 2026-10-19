@@ -3,7 +3,6 @@ version: '3.8'
 services:
   pedidos-bot:
     build: .
-    image: pedidos-cdkeysperu:latest
     container_name: pedidos-cdkeysperu
     restart: unless-stopped
     ports:
