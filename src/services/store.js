@@ -20,7 +20,8 @@ class Store {
       commandIssuedAt: 0,
       lastAck: null,
       shuttingDown: false,
-      shuttingDownAt: 0
+      shuttingDownAt: 0,
+      lastShutdownAt: 0
     };
 
     this._ensureDir();
@@ -55,6 +56,7 @@ class Store {
       if (fs.existsSync(this.pcFilePath)) {
         const raw = fs.readFileSync(this.pcFilePath, 'utf8');
         this.pc = { ...this.pc, ...JSON.parse(raw) };
+        this._checkShutdownTimeout();
       }
     } catch (err) {
       console.error('[Store] Error leyendo pc_state.json:', err.message);
@@ -169,11 +171,41 @@ class Store {
 
   // --- MÉTODOS PARA AGENTE PC ---
 
+  _sanitizeHostname(name) {
+    if (!name || typeof name !== 'string') return 'PC';
+    return name
+      .replace(/\uFFFD/g, 'ú')
+      .replace(/CDKEYSPER[Úú]?/i, 'CDKeysPerú');
+  }
+
+  _checkShutdownTimeout() {
+    if (this.pc.shuttingDown) {
+      const elapsed = Date.now() - (this.pc.shuttingDownAt || 0);
+      // Tras 25 segundos (Windows ejecuta shutdown /s /f /t 5), el apagado concluyó
+      if (elapsed > 25000) {
+        this.pc.shuttingDown = false;
+        this.pc.shuttingDownAt = 0;
+        if (!this.pc.lastShutdownAt) {
+          this.pc.lastShutdownAt = Date.now();
+        }
+        this._savePc();
+      }
+    }
+  }
+
+  completeShutdown() {
+    this.pc.shuttingDown = false;
+    this.pc.shuttingDownAt = 0;
+    this.pc.lastShutdownAt = Date.now();
+    this._savePc();
+  }
+
   updatePcHeartbeat(data = {}) {
     this.pc.lastHeartbeat = Date.now();
     this.pc.shuttingDown = false;
     this.pc.shuttingDownAt = 0;
-    if (data.hostname) this.pc.hostname = data.hostname;
+    this.pc.lastShutdownAt = 0;
+    if (data.hostname) this.pc.hostname = this._sanitizeHostname(data.hostname);
     if (data.platform) this.pc.platform = data.platform;
     if (typeof data.uptimeSeconds === 'number') this.pc.uptimeSeconds = data.uptimeSeconds;
     if (data.localIp) this.pc.localIp = data.localIp;
@@ -182,21 +214,27 @@ class Store {
   }
 
   isPcOnline(thresholdSeconds = config.pcAgent.offlineThresholdSeconds) {
+    this._checkShutdownTimeout();
     if (this.pc.shuttingDown) return false;
+    if (this.pc.lastShutdownAt && this.pc.lastShutdownAt >= this.pc.lastHeartbeat) {
+      return false;
+    }
     if (!this.pc.lastHeartbeat) return false;
     const diffSeconds = (Date.now() - this.pc.lastHeartbeat) / 1000;
     return diffSeconds <= thresholdSeconds;
   }
 
   getPcStatus() {
+    this._checkShutdownTimeout();
     return {
       online: this.isPcOnline(),
       shuttingDown: Boolean(this.pc.shuttingDown),
-      hostname: this.pc.hostname,
+      hostname: this._sanitizeHostname(this.pc.hostname),
       platform: this.pc.platform,
       uptimeSeconds: this.pc.uptimeSeconds,
       localIp: this.pc.localIp,
       lastHeartbeat: this.pc.lastHeartbeat,
+      lastShutdownAt: this.pc.lastShutdownAt || 0,
       pendingCommand: this.pc.pendingCommand,
       commandIssuedAt: this.pc.commandIssuedAt
     };
@@ -234,7 +272,7 @@ class Store {
       if (result.status === 'shutdown_initiated' || result.status === 'executing') {
         this.pc.shuttingDown = true;
         this.pc.shuttingDownAt = Date.now();
-        this.pc.lastHeartbeat = 0; // Se marca apagada al instante
+        this.pc.lastShutdownAt = Date.now();
       }
       this._savePc();
       return true;

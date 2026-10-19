@@ -23,6 +23,8 @@ if (Test-Path $ConfigFile) {
     $Interval = 5
 }
 
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host "INICIANDO AGENTE DE PC - CDKEYSPERU" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Cyan
@@ -71,10 +73,11 @@ while ($true) {
             localIp = $localIp
         }
         $body = $bodyObj | ConvertTo-Json
+        $utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
 
         # 1. Enviar Heartbeat al bot
         $heartbeatUrl = "$ServerUrl/api/pc/heartbeat"
-        $hbRes = Invoke-RestMethod -Uri $heartbeatUrl -Method Post -Headers $Headers -Body $body -TimeoutSec 5 -ErrorAction Stop
+        $hbRes = Invoke-RestMethod -Uri $heartbeatUrl -Method Post -Headers $Headers -ContentType "application/json; charset=utf-8" -Body $utf8Bytes -TimeoutSec 5 -ErrorAction Stop
 
         # 2. Consultar si hay ordenes de apagado
         $pollUrl = "$ServerUrl/api/pc/poll"
@@ -95,8 +98,9 @@ while ($true) {
                     message = "Windows ejecutando shutdown /s /f /t 5"
                 }
                 $ackBody = $ackObj | ConvertTo-Json
+                $ackBytes = [System.Text.Encoding]::UTF8.GetBytes($ackBody)
                 try {
-                    Invoke-RestMethod -Uri "$ServerUrl/api/pc/ack" -Method Post -Headers $Headers -Body $ackBody -TimeoutSec 5 -ErrorAction SilentlyContinue
+                    Invoke-RestMethod -Uri "$ServerUrl/api/pc/ack" -Method Post -Headers $Headers -ContentType "application/json; charset=utf-8" -Body $ackBytes -TimeoutSec 5 -ErrorAction SilentlyContinue
                 } catch {}
 
                 # Ejecutar shutdown forzado en 5 segundos

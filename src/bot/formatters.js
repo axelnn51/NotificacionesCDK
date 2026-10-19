@@ -97,7 +97,7 @@ function formatDatePeru(dateString) {
  * Formatea el tiempo transcurrido en formato legible (ej: "hace 5 min", "hace 2 horas")
  */
 function formatTimeAgo(timestamp) {
-  if (!timestamp) return 'Nunca';
+  if (!timestamp) return 'No disponible';
   const diffSec = Math.floor((Date.now() - timestamp) / 1000);
   if (diffSec < 5) return 'hace un instante';
   if (diffSec < 60) return `hace ${diffSec} seg`;
@@ -204,15 +204,21 @@ function formatOrderNotification(order, previousStatus = null) {
 const formatNewOrder = (order) => formatOrderNotification(order, null);
 const formatStatusChange = (order, oldStatus) => formatOrderNotification(order, oldStatus);
 
+function cleanHostname(name) {
+  if (!name || typeof name !== 'string') return 'DESKTOP';
+  return name
+    .replace(/\uFFFD/g, 'ú')
+    .replace(/CDKEYSPER[Úú]?/i, 'CDKeysPerú');
+}
+
 /**
  * Formatea el estado de la PC para Telegram
  */
 function formatPcStatus(pcState) {
   const isOnline = Boolean(pcState.online);
   const isShuttingDown = Boolean(pcState.shuttingDown);
-  const hostname = pcState.hostname || 'DESKTOP';
+  const hostname = cleanHostname(pcState.hostname);
   const localIp = pcState.localIp || 'N/A';
-  const uptime = formatUptime(pcState.uptimeSeconds);
   const timeAgo = formatTimeAgo(pcState.lastHeartbeat);
 
   if (isShuttingDown) {
@@ -223,7 +229,7 @@ function formatPcStatus(pcState) {
       `🏷️ <b>Nombre:</b> <code>${escapeHtml(hostname)}</code>\n` +
       `⏳ <b>Detalle:</b> Orden de apagado ejecutada en Windows.\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `<i>El equipo está cerrando Windows y se desconectará en breve.</i>`
+      `<i>El equipo está cerrando Windows y se desconectará en breve (unos segundos)...</i>`
     );
   }
 
@@ -240,14 +246,20 @@ function formatPcStatus(pcState) {
     );
   }
 
+  let shutdownInfo = '';
+  if (pcState.lastShutdownAt && Date.now() - pcState.lastShutdownAt < 86400000 * 2) {
+    shutdownInfo = `💤 <b>Último apagado:</b> ${formatTimeAgo(pcState.lastShutdownAt)}\n`;
+  }
+
   return (
     `💻 <b>ESTADO DE MI EQUIPO (PC)</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━━━\n` +
     `🔴 <b>ESTADO:</b> <b>APAGADO / DESCONECTADO</b>\n\n` +
     `🏷️ <b>Nombre:</b> <code>${escapeHtml(hostname)}</code>\n` +
     `📡 <b>Última señal recibida:</b> ${timeAgo}\n` +
+    shutdownInfo +
     `━━━━━━━━━━━━━━━━━━━━━━\n` +
-    `<i>El agente de la PC no ha enviado pings recientes. Si la PC está apagada, no responderá a comandos remotos.</i>`
+    `<i>El equipo se encuentra apagado o sin conexión a internet.</i>`
   );
 }
 

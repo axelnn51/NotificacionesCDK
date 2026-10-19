@@ -65,9 +65,10 @@ router.post('/ack', requirePcToken, async (req, res) => {
         `<i>El sistema se desconectará en breve.</i>`
       );
 
-      // A los 12 segundos (tiempo de apagado forzado), enviar confirmación automática
+      // A los 12 segundos (tiempo de apagado forzado /t 5), completar apagado y notificar
       setTimeout(async () => {
         try {
+          store.completeShutdown();
           const currentStatus = store.getPcStatus();
           await telegram.broadcast(
             `🔴 <b>PC APAGADA TOTALMENTE</b>\n` +
