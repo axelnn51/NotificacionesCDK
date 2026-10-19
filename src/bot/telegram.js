@@ -122,8 +122,8 @@ class TelegramBotService {
     this.bot.command('estado', sendPcStatus);
     this.bot.hears('💻 Estado de mi PC', sendPcStatus);
 
-    // Botón '🔄 Sincronizar Ahora'
-    this.bot.hears('🔄 Sincronizar Ahora', async (ctx) => {
+    // Comando /sync, /sincronizar o botón '🔄 Sincronizar Ahora'
+    const handleSync = async (ctx) => {
       await ctx.reply('🔄 <i>Comprobando pedidos nuevos en la tienda...</i>', { parse_mode: 'HTML' });
       if (typeof this.onManualSyncRequested === 'function') {
         try {
@@ -135,7 +135,11 @@ class TelegramBotService {
       } else {
         await ctx.reply('ℹ️ El monitor en segundo plano está activo y operativo.');
       }
-    });
+    };
+
+    this.bot.command('sync', handleSync);
+    this.bot.command('sincronizar', handleSync);
+    this.bot.hears('🔄 Sincronizar Ahora', handleSync);
 
     // Comando /apagar directo
     this.bot.command('apagar', async (ctx) => {
@@ -312,19 +316,28 @@ class TelegramBotService {
   }
 
   /**
-   * Inicia el bot en modo polling
+   * Inicia el bot en modo polling (no bloqueante)
    */
   async launch() {
     if (!this.isReady || !this.bot) return;
 
     try {
-      await this.bot.launch();
+      // 1. Probar conectividad y autenticación con Telegram
       const me = await this.bot.telegram.getMe();
-      console.log(`[Telegram] Bot iniciado con éxito: @${me.username} (${me.first_name})`);
+      console.log(`[Telegram] ✅ Bot autenticado con éxito: @${me.username} (${me.first_name})`);
+
+      // 2. Iniciar sondeo (polling) en segundo plano sin bloquear el arranque de los demás servicios
+      this.bot.launch().catch(err => {
+        console.error('[Telegram] Error en ciclo de sondeo:', err.message);
+        if (err.message && err.message.includes('409: Conflict')) {
+          console.error('⚠️ ALERTA: Conflicto 409: Hay otra instancia usando este mismo token de Telegram.');
+        }
+      });
+      console.log('[Telegram] Sondeo de mensajes activo en segundo plano.');
     } catch (err) {
-      console.error('[Telegram] Error al lanzar el bot:', err.message);
-      if (err.message.includes('409: Conflict')) {
-        console.error('⚠️ ALERTA: Hay otra instancia usando este mismo token de Telegram. Asegúrate de detener otras instancias o usar un token dedicado.');
+      console.error('[Telegram] Error al conectar con Telegram:', err.message);
+      if (err.message && err.message.includes('409: Conflict')) {
+        console.error('⚠️ ALERTA: Conflicto 409 con Telegram API (otra instancia activa usando este token).');
       }
     }
   }

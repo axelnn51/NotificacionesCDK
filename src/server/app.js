@@ -4,6 +4,8 @@ const pcApiRoutes = require('./routes/pcApi');
 const store = require('../services/store');
 const woocommerce = require('../services/woocommerce');
 
+const orderMonitor = require('../services/orderMonitor');
+
 const app = express();
 
 // Middlewares globales
@@ -13,6 +15,16 @@ app.use(express.urlencoded({ extended: true }));
 // Rutas principales
 app.use('/webhook', webhookRoutes);
 app.use('/api/pc', pcApiRoutes);
+
+// Endpoint manual de sincronización para pruebas o webhooks externos
+app.all('/api/sync', async (req, res) => {
+  try {
+    const result = await orderMonitor.checkOrders();
+    return res.json({ ok: true, result });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
 
 // Health check para Docker / Portainer
 app.get('/health', (req, res) => {
