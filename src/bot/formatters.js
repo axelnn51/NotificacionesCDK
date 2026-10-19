@@ -234,7 +234,6 @@ function formatPcStatus(pcState) {
       `🟢 <b>ESTADO:</b> <b>ENCENDIDO (Online)</b>\n\n` +
       `🏷️ <b>Nombre:</b> <code>${escapeHtml(hostname)}</code>\n` +
       `🌐 <b>IP Local:</b> <code>${escapeHtml(localIp)}</code>\n` +
-      `⏱️ <b>Tiempo encendido:</b> ${uptime}\n` +
       `📡 <b>Último contacto:</b> ${timeAgo}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
       `<i>Puedes actualizar el estado o enviar la orden de apagado directo.</i>`
