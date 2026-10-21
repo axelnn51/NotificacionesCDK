@@ -7,7 +7,8 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "test-wc": "node src/scripts/test-wc.js",
-    "test-tg": "node src/scripts/test-tg.js"
+    "test-tg": "node src/scripts/test-tg.js",
+    "sync-missed": "node src/scripts/sync-missed.js"
   },
   "keywords": [
     "woocommerce",

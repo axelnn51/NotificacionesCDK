@@ -26,15 +26,76 @@ app.all('/api/sync', async (req, res) => {
   }
 });
 
+// Endpoint para forzar reintento de pedidos no notificados
+app.all('/api/sync/missed', async (req, res) => {
+  try {
+    const telegram = require('../bot/telegram');
+    const recent = await woocommerce.getRecentOrders({ per_page: 30, status: 'any' });
+    let resent = 0;
+    for (const order of recent) {
+      if (!store.hasOrderBeenNotified(order.id)) {
+        store.recordOrder(order);
+        const delivered = await telegram.sendOrUpdateOrderNotification(order, null);
+        if (delivered) resent++;
+        await new Promise(r => setTimeout(r, 400));
+      }
+    }
+    return res.json({ ok: true, resentCount: resent });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Diagnóstico detallado del sistema
+app.get('/api/diag', (req, res) => {
+  const telegram = require('../bot/telegram');
+  const config = require('../config');
+  const pcStatus = store.getPcStatus();
+
+  return res.json({
+    ok: true,
+    server: {
+      uptimeSeconds: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString(),
+      nodeVersion: process.version,
+      platform: process.platform,
+      timezone: config.timezone
+    },
+    telegram: {
+      configured: Boolean(config.telegram.token),
+      isReady: telegram.isReady,
+      adminChatIdsCount: config.telegram.adminChatIds.length,
+      adminChatIdsMasked: config.telegram.adminChatIds.map(id => id.replace(/\d(?=\d{3})/g, '*'))
+    },
+    woocommerce: {
+      isConfigured: woocommerce.isConfigured,
+      url: config.woocommerce.url,
+      pollIntervalSeconds: config.woocommerce.pollIntervalSeconds,
+      pollBatchSize: config.woocommerce.pollBatchSize
+    },
+    pc: pcStatus,
+    store: {
+      trackedOrdersCount: store.getOrderCount(),
+      unnotifiedOrdersCount: store.getUnnotifiedOrders(48).length
+    }
+  });
+});
+
 // Health check para Docker / Portainer
 app.get('/health', (req, res) => {
+  const telegram = require('../bot/telegram');
+  const config = require('../config');
   const pcStatus = store.getPcStatus();
+
   return res.json({
     status: 'healthy',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
     trackedOrders: store.getOrderCount(),
     woocommerceConfigured: woocommerce.isConfigured,
+    telegramConfigured: Boolean(config.telegram.token),
+    telegramReady: telegram.isReady,
+    adminChatIdsCount: config.telegram.adminChatIds.length,
     pcOnline: pcStatus.online,
     pcHostname: pcStatus.hostname
   });

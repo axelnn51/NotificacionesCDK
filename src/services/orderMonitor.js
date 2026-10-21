@@ -40,6 +40,25 @@ class OrderMonitor {
   }
 
   /**
+   * Obtiene la marca de tiempo precisa de un pedido considerando GMT o zona horaria de Perú
+   */
+  _getOrderTimestamp(order) {
+    if (!order) return Date.now();
+    const dateStr = order.date_created_gmt || order.date_created;
+    if (!dateStr) return Date.now();
+    if (typeof dateStr !== 'string') return new Date(dateStr).getTime();
+
+    if (dateStr.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(dateStr)) {
+      return new Date(dateStr).getTime();
+    }
+    if (order.date_created_gmt) {
+      return new Date(`${dateStr}Z`).getTime();
+    }
+    // Hora local de Perú (America/Lima UTC-5)
+    return new Date(`${dateStr}-05:00`).getTime();
+  }
+
+  /**
    * Sincroniza el lote inicial.
    * IMPORTANTE: Indexa silenciosamente solo pedidos con más de 4 horas de antigüedad.
    * Los pedidos recientes (< 4 horas) se dejan para ser notificados en el primer ciclo.
@@ -55,14 +74,14 @@ class OrderMonitor {
 
     try {
       console.log('[OrderMonitor] Primer arranque: obteniendo pedidos recientes para inicializar base de datos local...');
-      const orders = await woocommerce.getRecentOrders({ per_page: 50 });
+      const orders = await woocommerce.getRecentOrders({ per_page: 50, status: 'any' });
 
       const fourHoursMs = 4 * 60 * 60 * 1000;
       const now = Date.now();
 
       // Filtrar históricos (pedidos con más de 4 horas)
       const historicalOrders = orders.filter(o => {
-        const orderTime = o.date_created_gmt ? new Date(o.date_created_gmt + 'Z').getTime() : new Date(o.date_created).getTime();
+        const orderTime = this._getOrderTimestamp(o);
         return (now - orderTime) > fourHoursMs;
       });
 
@@ -90,18 +109,20 @@ class OrderMonitor {
     let statusUpdatesCount = 0;
 
     try {
-      // 1. Obtener pedidos recientes por fecha de creación
+      // 1. Obtener pedidos recientes por fecha de creación (con status: 'any')
       const recentByDate = await woocommerce.getRecentOrders({
         per_page: config.woocommerce.pollBatchSize || 20,
         orderby: 'date',
-        order: 'desc'
+        order: 'desc',
+        status: 'any'
       });
 
       // 2. Obtener pedidos recientes por fecha de modificación (para detectar cambios en pedidos antiguos)
       const recentByModified = await woocommerce.getRecentOrders({
         per_page: config.woocommerce.pollBatchSize || 20,
         orderby: 'modified',
-        order: 'desc'
+        order: 'desc',
+        status: 'any'
       });
 
       // Unir sin duplicados
@@ -137,33 +158,38 @@ class OrderMonitor {
   }
 
   /**
-   * Procesa un pedido individual: detecta si es nuevo o si cambió su estado
+   * Procesa un pedido individual: detecta si es nuevo, si no fue notificado, o si cambió de estado
    */
   async processOrder(order) {
     if (!order || !order.id) return 'IGNORED';
 
     const orderId = String(order.id);
     const tracked = store.getOrder(orderId);
+    const hasBeenNotified = store.hasOrderBeenNotified(orderId);
 
-    // CASO 1: Pedido totalmente nuevo
-    if (!tracked) {
-      const orderTime = order.date_created_gmt ? new Date(order.date_created_gmt + 'Z').getTime() : new Date(order.date_created).getTime();
-      const ageHours = (Date.now() - orderTime) / (1000 * 3600);
+    const orderTime = this._getOrderTimestamp(order);
+    const ageHours = (Date.now() - orderTime) / (1000 * 3600);
 
-      // Si por alguna razón es un pedido antiguo (> 6 horas) que no estaba en el estado, registrarlo sin alertar
-      if (ageHours > 6) {
-        console.log(`[OrderMonitor] 📦 Pedido histórico detectado #${order.id} (${order.status}, ${ageHours.toFixed(1)}h atrás). Registrado sin alerta.`);
-        store.recordOrder(order);
-        return 'HISTORICAL';
-      }
-
-      console.log(`[OrderMonitor] 🛒 ¡Nuevo pedido detectado! #${order.id} (${order.status})`);
+    // CASO A: Pedido no registrado y con más de 24h de antigüedad (histórico puro)
+    if (!tracked && ageHours > 24) {
+      console.log(`[OrderMonitor] 📦 Pedido histórico detectado #${order.id} (${order.status}, ${ageHours.toFixed(1)}h atrás). Registrado sin alerta.`);
       store.recordOrder(order);
-      await telegram.sendOrUpdateOrderNotification(order, null);
-      return 'NEW';
+      return 'HISTORICAL';
     }
 
-    // CASO 2: El pedido ya existía, pero su estado cambió (se actualiza el mismo mensaje en tiempo real)
+    // CASO B: Pedido nuevo O pedido registrado que jamás se notificó con éxito a Telegram
+    if (!tracked || !hasBeenNotified) {
+      console.log(`[OrderMonitor] 🛒 ¡Notificando pedido #${order.id} (${order.status}, age: ${ageHours.toFixed(1)}h)!`);
+      store.recordOrder(order);
+      const delivered = await telegram.sendOrUpdateOrderNotification(order, null);
+      if (delivered) {
+        return 'NEW';
+      }
+      console.warn(`[OrderMonitor] ⚠️ No se pudo entregar notificación de pedido #${order.id}. Se reintentará en el próximo ciclo.`);
+      return 'RETRY_PENDING';
+    }
+
+    // CASO C: El pedido ya fue notificado previamente, pero su estado cambió en WooCommerce
     if (tracked.status !== order.status) {
       console.log(`[OrderMonitor] 🔄 Cambio de estado en pedido #${order.id}: ${tracked.status} -> ${order.status}`);
       const oldStatus = tracked.status;

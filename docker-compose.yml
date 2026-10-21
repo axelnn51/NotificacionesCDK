@@ -17,7 +17,7 @@ services:
 
       # --- Telegram Bot ---
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - ADMIN_CHAT_ID=${ADMIN_CHAT_ID}
+      - ADMIN_CHAT_ID=${ADMIN_CHAT_ID:-7233007906}
 
       # --- WooCommerce (Solo Lectura) ---
       - WC_URL=${WC_URL:-https://cdkeysperu.com}

@@ -12,11 +12,12 @@ const config = {
 
   // Telegram
   telegram: {
-    token: process.env.TELEGRAM_BOT_TOKEN || '',
+    token: (process.env.TELEGRAM_BOT_TOKEN || '').trim().replace(/^["']|["']$/g, ''),
     // Permite múltiples Chat IDs separados por coma: "123456,789012"
-    adminChatIds: (process.env.ADMIN_CHAT_ID || '')
+    // Con fallback por defecto seguro a '7233007906' si no se configuró en Portainer
+    adminChatIds: (process.env.ADMIN_CHAT_ID || '7233007906')
       .split(',')
-      .map(id => id.trim())
+      .map(id => id.trim().replace(/^["']|["']$/g, ''))
       .filter(id => id.length > 0)
   },
 

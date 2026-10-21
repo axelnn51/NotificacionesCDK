@@ -77,7 +77,21 @@ function getStatusInfo(statusKey) {
  */
 function formatDatePeru(dateString) {
   try {
-    const date = dateString ? new Date(dateString) : new Date();
+    if (!dateString) return 'N/A';
+    let date;
+    if (dateString instanceof Date) {
+      date = dateString;
+    } else if (typeof dateString === 'string') {
+      if (dateString.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(dateString)) {
+        date = new Date(dateString);
+      } else {
+        // WooCommerce entrega date_created en hora local de Lima sin sufijo de timezone
+        date = new Date(`${dateString}-05:00`);
+      }
+    } else {
+      date = new Date(dateString);
+    }
+
     return date.toLocaleString('es-PE', {
       timeZone: 'America/Lima',
       day: '2-digit',

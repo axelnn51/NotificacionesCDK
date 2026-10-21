@@ -142,6 +142,22 @@ class Store {
     return this.orders[id]?.telegramMessages || {};
   }
 
+  hasOrderBeenNotified(orderId) {
+    const id = String(orderId);
+    const msgs = this.orders[id]?.telegramMessages;
+    return Boolean(msgs && Object.keys(msgs).length > 0);
+  }
+
+  getUnnotifiedOrders(maxAgeHours = 48) {
+    const now = Date.now();
+    const cutoffMs = maxAgeHours * 3600 * 1000;
+    return Object.values(this.orders).filter(order => {
+      if (this.hasOrderBeenNotified(order.id)) return false;
+      const orderTime = new Date(order.date_created).getTime() || order.notifiedAt || 0;
+      return (now - orderTime) <= cutoffMs;
+    });
+  }
+
   // Registra un lote de órdenes iniciales sin notificar
   initializeBatch(orders) {
     let count = 0;

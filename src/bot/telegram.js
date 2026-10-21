@@ -141,6 +141,28 @@ class TelegramBotService {
     this.bot.command('sincronizar', handleSync);
     this.bot.hears('🔄 Sincronizar Ahora', handleSync);
 
+    // Comando /test: Verifica conectividad de alertas y WooCommerce
+    this.bot.command('test', async (ctx) => {
+      try {
+        const wcTest = await woocommerce.testConnection();
+        const pcStatus = store.getPcStatus();
+        const testMsg = (
+          `🧪 <b>PRUEBA DE ESTADO DEL SISTEMA</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `🤖 <b>Bot Telegram:</b> Operativo ✅\n` +
+          `🛒 <b>WooCommerce:</b> ${wcTest.ok ? 'Conectado (Solo Lectura) ✅' : '⚠️ Error: ' + wcTest.error}\n` +
+          `💻 <b>Estado de PC:</b> ${pcStatus.online ? '🟢 Online' : '🔴 Offline'}\n` +
+          `📦 <b>Pedidos en base local:</b> ${store.getOrderCount()}\n` +
+          `🕒 <b>Hora Servidor:</b> ${formatters.formatDatePeru(new Date())}\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `<i>Las notificaciones en tiempo real están activas.</i>`
+        );
+        await ctx.reply(testMsg, { parse_mode: 'HTML' });
+      } catch (err) {
+        await ctx.reply(`⚠️ Error en prueba: ${err.message}`);
+      }
+    });
+
     // Comando /apagar directo
     this.bot.command('apagar', async (ctx) => {
       const pcStatus = store.getPcStatus();
@@ -240,13 +262,13 @@ class TelegramBotService {
   async sendOrUpdateOrderNotification(order, previousStatus = null) {
     if (!this.isReady || !this.bot) {
       console.warn('[Telegram] No se puede enviar notificación, bot no inicializado.');
-      return;
+      return false;
     }
 
     const recipients = config.telegram.adminChatIds;
     if (!recipients || recipients.length === 0) {
       console.warn('[Telegram] No hay ADMIN_CHAT_ID configurado para recibir alertas.');
-      return;
+      return false;
     }
 
     const htmlMessage = formatters.formatOrderNotification(order, previousStatus);
@@ -254,6 +276,8 @@ class TelegramBotService {
       parse_mode: 'HTML',
       disable_web_page_preview: true
     };
+
+    let delivered = false;
 
     for (const chatId of recipients) {
       const existingMessageId = store.getOrderTelegramMessage(order.id, chatId);
@@ -263,11 +287,13 @@ class TelegramBotService {
         try {
           await this.bot.telegram.editMessageText(chatId, existingMessageId, null, htmlMessage, options);
           console.log(`[Telegram] ✅ Mensaje de pedido #${order.id} actualizado en tiempo real en chat ${chatId}`);
+          delivered = true;
           continue;
         } catch (err) {
           const errMsg = err.message || '';
           if (errMsg.includes('message is not modified')) {
-            // El contenido no cambió, no se hace nada
+            // El contenido no cambió, se considera éxito
+            delivered = true;
             continue;
           }
           console.warn(`[Telegram] No se pudo editar mensaje existente #${existingMessageId} (${errMsg}), enviando nuevo...`);
@@ -279,10 +305,13 @@ class TelegramBotService {
         const sent = await this.bot.telegram.sendMessage(chatId, htmlMessage, options);
         store.setOrderTelegramMessage(order.id, chatId, sent.message_id);
         console.log(`[Telegram] 🔔 Mensaje nuevo enviado para pedido #${order.id} (Msg ID: ${sent.message_id}) en chat ${chatId}`);
+        delivered = true;
       } catch (err) {
         console.error(`[Telegram] Error enviando mensaje a Chat ID ${chatId}:`, err.message);
       }
     }
+
+    return delivered;
   }
 
   /**
@@ -291,13 +320,13 @@ class TelegramBotService {
   async broadcast(htmlMessage, extra = {}) {
     if (!this.isReady || !this.bot) {
       console.warn('[Telegram] No se puede enviar broadcast, bot no inicializado.');
-      return;
+      return false;
     }
 
     const recipients = config.telegram.adminChatIds;
     if (!recipients || recipients.length === 0) {
       console.warn('[Telegram] No hay ADMIN_CHAT_ID configurado para recibir alertas.');
-      return;
+      return false;
     }
 
     const options = {
@@ -306,13 +335,18 @@ class TelegramBotService {
       ...extra
     };
 
+    let delivered = false;
+
     for (const chatId of recipients) {
       try {
         await this.bot.telegram.sendMessage(chatId, htmlMessage, options);
+        delivered = true;
       } catch (err) {
         console.error(`[Telegram] Error enviando mensaje a Chat ID ${chatId}:`, err.message);
       }
     }
+
+    return delivered;
   }
 
   /**
