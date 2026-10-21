@@ -132,15 +132,31 @@ function Capture-ScreenBase64 {
 
 function Send-AntigravityPrompt([string]$promptText) {
     try {
+        # 1. Intentar inyeccion nativa ultra-precisa por CDP (puerto 9000 de Antigravity)
+        $nodeScript = Join-Path $ScriptDir "inject-prompt.js"
+        if (Test-Path $nodeScript) {
+            $jsonArg = @{ text = $promptText } | ConvertTo-Json -Compress
+            $res = & node $nodeScript $jsonArg 2>&1 | Out-String
+            if ($res -match "SENT_OK") {
+                Write-Host "[PROMPT] Inyectado nativamente via CDP en Antigravity" -ForegroundColor Green
+                return $true
+            }
+            Write-Host "[PROMPT CDP] Resultado: $res - Probando fallback con teclado..." -ForegroundColor DarkYellow
+        }
+
+        # 2. Fallback con teclado: activa Antigravity, enfoca chat con Ctrl+L y envia Enter
         $wshell = New-Object -ComObject WScript.Shell
-        # Activar ventana de Antigravity IDE
         $focused = $wshell.AppActivate("Antigravity")
         Start-Sleep -Milliseconds 350
-        
+
+        # Ctrl+L enfoca directamente la barra de chat en Antigravity IDE
+        $wshell.SendKeys("^l")
+        Start-Sleep -Milliseconds 250
+
         # Copiar texto al portapapeles
         [System.Windows.Forms.Clipboard]::SetText($promptText)
         Start-Sleep -Milliseconds 150
-        
+
         # Enviar Ctrl+V y Enter
         $wshell.SendKeys("^v")
         Start-Sleep -Milliseconds 250
@@ -154,6 +170,17 @@ function Send-AntigravityPrompt([string]$promptText) {
 
 function Send-AntigravityKey([string]$keyName) {
     try {
+        # 1. Intentar accion nativa via CDP (puerto 9000)
+        $nodeAction = Join-Path $ScriptDir "inject-action.js"
+        if (Test-Path $nodeAction) {
+            $res = & node $nodeAction $keyName 2>&1 | Out-String
+            if ($res -match "CLICKED") {
+                Write-Host "[KEY] Accion '$keyName' ejecutada via CDP" -ForegroundColor Green
+                return $true
+            }
+        }
+
+        # 2. Fallback por teclado
         $wshell = New-Object -ComObject WScript.Shell
         $wshell.AppActivate("Antigravity")
         Start-Sleep -Milliseconds 200
