@@ -36,6 +36,168 @@ Write-Host "============================================================" -Foreg
 Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
 Add-Type -AssemblyName System.Drawing -ErrorAction SilentlyContinue
 
+# Definicion de ScreenCapturer para soporte multi-pantalla y conexion segura a Desktop
+if (-not ([System.Management.Automation.PSTypeName]'ScreenCapturer').Type) {
+    try {
+        Add-Type -TypeDefinition @"
+        using System;
+        using System.IO;
+        using System.Collections.Generic;
+        using System.Threading;
+        using System.Runtime.InteropServices;
+        using System.Drawing;
+        using System.Drawing.Imaging;
+        using System.Windows.Forms;
+
+        public class ScreenInfo {
+            public int Index;
+            public string DeviceName;
+            public string Name;
+            public int X;
+            public int Y;
+            public int Width;
+            public int Height;
+            public bool IsPrimary;
+            public string ImageBase64;
+        }
+
+        public class MultiScreenResult {
+            public List<ScreenInfo> Screens = new List<ScreenInfo>();
+            public string PanoramicBase64 = null;
+            public string PanoramicResolution = null;
+            public string PrimaryBase64 = null;
+            public string Error = null;
+        }
+
+        public class ScreenCapturer {
+            [DllImport("user32.dll", SetLastError = true)]
+            public static extern IntPtr OpenWindowStation(string lpszWinSta, bool fInherit, uint dwDesiredAccess);
+
+            [DllImport("user32.dll", SetLastError = true)]
+            public static extern bool SetProcessWindowStation(IntPtr hWinSta);
+
+            [DllImport("user32.dll", SetLastError = true)]
+            public static extern IntPtr OpenInputDesktop(uint dwFlags, bool fInherit, uint dwDesiredAccess);
+
+            [DllImport("user32.dll", SetLastError = true)]
+            public static extern bool SetThreadDesktop(IntPtr hDesktop);
+
+            [DllImport("user32.dll", SetLastError = true)]
+            public static extern bool CloseDesktop(IntPtr hDesktop);
+
+            private static ImageCodecInfo GetEncoder(ImageFormat format) {
+                ImageCodecInfo[] codecs = ImageCodecInfo.GetImageDecoders();
+                foreach (ImageCodecInfo codec in codecs) {
+                    if (codec.FormatID == format.Guid) {
+                        return codec;
+                    }
+                }
+                return null;
+            }
+
+            public static string ToJpegBase64(Bitmap bmp, long quality = 75L) {
+                using (MemoryStream ms = new MemoryStream()) {
+                    ImageCodecInfo encoder = GetEncoder(ImageFormat.Jpeg);
+                    EncoderParameters encoderParams = new EncoderParameters(1);
+                    encoderParams.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, quality);
+                    bmp.Save(ms, encoder, encoderParams);
+                    return Convert.ToBase64String(ms.ToArray());
+                }
+            }
+
+            public static MultiScreenResult CaptureAll(string target = "all") {
+                MultiScreenResult result = new MultiScreenResult();
+
+                Thread t = new Thread(() => {
+                    IntPtr hDesk = IntPtr.Zero;
+                    try {
+                        IntPtr hwinsta = OpenWindowStation("winsta0", false, 0x10000000);
+                        if (hwinsta != IntPtr.Zero) SetProcessWindowStation(hwinsta);
+                        hDesk = OpenInputDesktop(0, false, 0x10000000);
+                        if (hDesk != IntPtr.Zero) SetThreadDesktop(hDesk);
+
+                        Screen[] allScreens = Screen.AllScreens;
+                        Array.Sort(allScreens, (a, b) => a.Bounds.X.CompareTo(b.Bounds.X));
+
+                        if (target == "panoramic" || target == "all") {
+                            Rectangle vs = SystemInformation.VirtualScreen;
+                            using (Bitmap fullBmp = new Bitmap(vs.Width, vs.Height)) {
+                                using (Graphics g = Graphics.FromImage(fullBmp)) {
+                                    g.CopyFromScreen(vs.Left, vs.Top, 0, 0, vs.Size, CopyPixelOperation.SourceCopy);
+                                }
+                                result.PanoramicBase64 = ToJpegBase64(fullBmp, 70L);
+                                result.PanoramicResolution = vs.Width + "x" + vs.Height;
+                            }
+                        }
+
+                        for (int i = 0; i < allScreens.Length; i++) {
+                            Screen s = allScreens[i];
+                            int screenNum = i + 1;
+
+                            if (target != "all" && target != "panoramic" && target != screenNum.ToString()) {
+                                continue;
+                            }
+
+                            Rectangle b = s.Bounds;
+                            using (Bitmap sBmp = new Bitmap(b.Width, b.Height)) {
+                                using (Graphics g = Graphics.FromImage(sBmp)) {
+                                    g.CopyFromScreen(b.Location, Point.Empty, b.Size, CopyPixelOperation.SourceCopy);
+                                }
+                                string b64 = ToJpegBase64(sBmp, 75L);
+
+                                string posLabel = "";
+                                if (allScreens.Length == 3) {
+                                    if (i == 0) posLabel = " (Izquierda)";
+                                    else if (i == 1) posLabel = " (Centro)";
+                                    else if (i == 2) posLabel = " (Derecha)";
+                                } else if (allScreens.Length == 2) {
+                                    if (i == 0) posLabel = " (Izquierda)";
+                                    else if (i == 1) posLabel = " (Derecha)";
+                                }
+
+                                string name = "Pantalla " + screenNum + posLabel + (s.Primary ? " [Principal]" : "");
+
+                                ScreenInfo si = new ScreenInfo {
+                                    Index = screenNum,
+                                    DeviceName = s.DeviceName,
+                                    Name = name,
+                                    X = b.X,
+                                    Y = b.Y,
+                                    Width = b.Width,
+                                    Height = b.Height,
+                                    IsPrimary = s.Primary,
+                                    ImageBase64 = b64
+                                };
+
+                                result.Screens.Add(si);
+
+                                if (s.Primary) {
+                                    result.PrimaryBase64 = b64;
+                                }
+                            }
+                        }
+
+                        if (result.PrimaryBase64 == null && result.Screens.Count > 0) {
+                            result.PrimaryBase64 = result.Screens[0].ImageBase64;
+                        }
+                    } catch (Exception ex) {
+                        result.Error = ex.Message;
+                    } finally {
+                        if (hDesk != IntPtr.Zero) CloseDesktop(hDesk);
+                    }
+                });
+
+                t.SetApartmentState(ApartmentState.STA);
+                t.Start();
+                t.Join();
+
+                return result;
+            }
+        }
+"@ -ReferencedAssemblies System.Drawing, System.Windows.Forms -ErrorAction SilentlyContinue
+    } catch {}
+}
+
 # Definicion User32 para detectar ventana activa
 try {
     Add-Type -TypeDefinition @"
@@ -108,26 +270,26 @@ function Get-ActiveWindowTitle {
     return "Escritorio de Windows"
 }
 
-function Capture-ScreenBase64 {
+function Capture-ScreenMulti {
+    param(
+        [string]$target = "all"
+    )
     try {
-        $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-        $bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
-        $gfx = [System.Drawing.Graphics]::FromImage($bmp)
-        $gfx.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
-        
-        $ms = New-Object System.IO.MemoryStream
-        # Guardar en JPEG comprimido
-        $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Jpeg)
-        $bytes = $ms.ToArray()
-        $ms.Close()
-        $gfx.Dispose()
-        $bmp.Dispose()
-        
-        return [Convert]::ToBase64String($bytes)
+        if (([System.Management.Automation.PSTypeName]'ScreenCapturer').Type) {
+            return [ScreenCapturer]::CaptureAll($target)
+        }
     } catch {
-        Write-Host "[ERROR CAPTURA] $_" -ForegroundColor Red
-        return $null
+        Write-Host "[ERROR CAPTURA MULTI] $_" -ForegroundColor Red
     }
+    return $null
+}
+
+function Capture-ScreenBase64 {
+    $res = Capture-ScreenMulti -target "all"
+    if ($res -and $res.PrimaryBase64) {
+        return $res.PrimaryBase64
+    }
+    return $null
 }
 
 function Send-AntigravityPrompt([string]$promptText) {
@@ -245,26 +407,53 @@ while ($true) {
             $payload = $pollRes.payload
             Write-Host "[ORDEN RECIBIDA] Comando: $cmd (ID: $cmdId)" -ForegroundColor Yellow
 
-            # A) CAPTURA DE PANTALLA
+            # A) CAPTURA DE PANTALLA (Multi-pantalla: hasta 3 monitores + panoramica)
             if ($cmd -eq "screenshot") {
-                Write-Host "Tomando captura de pantalla..." -ForegroundColor Cyan
-                $base64Img = Capture-ScreenBase64
-                if ($base64Img) {
+                $target = if ($payload.target) { $payload.target } else { "all" }
+                Write-Host "Tomando captura de pantalla (Target: $target)..." -ForegroundColor Cyan
+                
+                $result = Capture-ScreenMulti -target $target
+                if ($result -and -not $result.Error) {
                     $shotObj = @{
-                        imageBase64 = $base64Img
+                        target = $target
                         windowTitle = $activeWindow
+                        imageBase64 = $result.PrimaryBase64
+                        screens = @()
                     }
-                    $shotBody = $shotObj | ConvertTo-Json
+
+                    if ($result.PanoramicBase64) {
+                        $shotObj.panoramic = @{
+                            resolution = $result.PanoramicResolution
+                            imageBase64 = $result.PanoramicBase64
+                        }
+                    }
+
+                    foreach ($s in $result.Screens) {
+                        $shotObj.screens += @{
+                            index = $s.Index
+                            name = $s.Name
+                            deviceName = $s.DeviceName
+                            resolution = "$($s.Width)x$($s.Height)"
+                            isPrimary = $s.IsPrimary
+                            imageBase64 = $s.ImageBase64
+                        }
+                    }
+
+                    $shotBody = $shotObj | ConvertTo-Json -Depth 5
                     $shotBytes = [System.Text.Encoding]::UTF8.GetBytes($shotBody)
                     try {
-                        Invoke-RestMethod -Uri "$ServerUrl/api/pc/screenshot" -Method Post -Headers $Headers -ContentType "application/json; charset=utf-8" -Body $shotBytes -TimeoutSec 10 -ErrorAction SilentlyContinue
+                        Invoke-RestMethod -Uri "$ServerUrl/api/pc/screenshot" -Method Post -Headers $Headers -ContentType "application/json; charset=utf-8" -Body $shotBytes -TimeoutSec 15 -ErrorAction SilentlyContinue
+                        Write-Host "Captura enviada con exito ($($shotObj.screens.Count) pantallas enviadas)." -ForegroundColor Green
                     } catch {
                         Write-Host "Error enviando screenshot al servidor: $_" -ForegroundColor Red
                     }
+                } else {
+                    $errMsg = if ($result -and $result.Error) { $result.Error } else { "Fallo en captura grafica" }
+                    Write-Host "No se pudo realizar la captura: $errMsg" -ForegroundColor Red
                 }
 
                 # Ack
-                $ackObj = @{ commandId = $cmdId; status = "screenshot_sent"; message = "Captura enviada" }
+                $ackObj = @{ commandId = $cmdId; status = "screenshot_sent"; message = "Captura ($target) procesada" }
                 $ackBytes = [System.Text.Encoding]::UTF8.GetBytes(($ackObj | ConvertTo-Json))
                 try { Invoke-RestMethod -Uri "$ServerUrl/api/pc/ack" -Method Post -Headers $Headers -ContentType "application/json; charset=utf-8" -Body $ackBytes -TimeoutSec 5 -ErrorAction SilentlyContinue } catch {}
             }

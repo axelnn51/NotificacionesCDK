@@ -108,14 +108,29 @@ class TelegramBotService {
     this.bot.command('help', sendHelp);
     this.bot.hears('ℹ️ Ayuda', sendHelp);
 
-    // Captura de pantalla
-    const handleScreenshot = async (ctx) => {
+    // Captura de pantalla (Soporte multi-monitor: individual, panorámica o todas)
+    const handleScreenshot = async (ctx, customTarget = null) => {
       const pcStatus = store.getPcStatus();
       if (!pcStatus.online) {
         return ctx.reply('🔴 <b>Tu PC está apagada o sin conexión.</b>\nNo se puede tomar captura de pantalla.', { parse_mode: 'HTML' });
       }
-      store.queuePcCommand('screenshot');
-      await ctx.reply('📸 <i>Solicitando captura de pantalla a tu PC... En unos segundos la recibirás.</i>', { parse_mode: 'HTML' });
+
+      let target = customTarget || 'all';
+      if (!customTarget && ctx.message && ctx.message.text) {
+        const parts = ctx.message.text.trim().split(/\s+/);
+        if (parts.length > 1) {
+          const arg = parts[1].toLowerCase();
+          if (['1', '2', '3', '4'].includes(arg)) target = arg;
+          else if (['pano', 'panoramic', 'panoramica', 'full', 'total'].includes(arg)) target = 'panoramic';
+          else if (['all', 'todas', 'todo'].includes(arg)) target = 'all';
+        }
+      }
+
+      store.queuePcCommand('screenshot', { target });
+      const targetLabel = target === 'all' 
+        ? 'todas las pantallas' 
+        : (target === 'panoramic' ? 'vista panorámica completa' : `pantalla ${target}`);
+      await ctx.reply(`📸 <i>Solicitando captura de ${targetLabel} a tu PC... En unos segundos la recibirás.</i>`, { parse_mode: 'HTML' });
     };
 
     this.bot.command('screenshot', handleScreenshot);
@@ -197,8 +212,21 @@ class TelegramBotService {
 
     this.bot.action('pc_screenshot', async (ctx) => {
       try {
-        await ctx.answerCbQuery('Solicitando captura...');
-        await handleScreenshot(ctx);
+        await ctx.answerCbQuery('Solicitando captura de todas las pantallas...');
+        await handleScreenshot(ctx, 'all');
+      } catch (err) {}
+    });
+
+    this.bot.action(/^pc_shot_(1|2|3|all|pano)$/, async (ctx) => {
+      try {
+        const targetRaw = ctx.match[1];
+        const target = targetRaw === 'pano' ? 'panoramic' : targetRaw;
+        const pcStatus = store.getPcStatus();
+        if (!pcStatus.online) {
+          return ctx.answerCbQuery('🔴 PC sin conexión', { show_alert: true });
+        }
+        await ctx.answerCbQuery();
+        await handleScreenshot(ctx, target);
       } catch (err) {}
     });
 
@@ -388,6 +416,35 @@ class TelegramBotService {
         delivered = true;
       } catch (err) {
         console.error(`[Telegram] Error enviando foto a Chat ID ${chatId}:`, err.message);
+      }
+    }
+
+    return delivered;
+  }
+
+  /**
+   * Envía un álbum de fotos (MediaGroup) a todos los administradores configurados
+   */
+  async sendMediaGroup(mediaItems) {
+    if (!this.isReady || !this.bot) {
+      console.warn('[Telegram] No se puede enviar álbum, bot no inicializado.');
+      return false;
+    }
+
+    const recipients = config.telegram.adminChatIds;
+    if (!recipients || recipients.length === 0) {
+      console.warn('[Telegram] No hay ADMIN_CHAT_ID configurado para recibir álbumes.');
+      return false;
+    }
+
+    let delivered = false;
+
+    for (const chatId of recipients) {
+      try {
+        await this.bot.telegram.sendMediaGroup(chatId, mediaItems);
+        delivered = true;
+      } catch (err) {
+        console.error(`[Telegram] Error enviando álbum a Chat ID ${chatId}:`, err.message);
       }
     }
 

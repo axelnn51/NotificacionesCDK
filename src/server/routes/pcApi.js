@@ -3,6 +3,7 @@ const config = require('../../config');
 const store = require('../../services/store');
 const telegram = require('../../bot/telegram');
 const formatters = require('../../bot/formatters');
+const keyboards = require('../../bot/keyboards');
 
 const router = express.Router();
 
@@ -56,20 +57,71 @@ router.get('/poll', requirePcToken, (req, res) => {
  */
 router.post('/screenshot', requirePcToken, async (req, res) => {
   try {
-    const { imageBase64, windowTitle } = req.body || {};
-    if (!imageBase64) {
-      return res.status(400).json({ error: 'imageBase64 requerido' });
-    }
-
-    const imageBuffer = Buffer.from(imageBase64, 'base64');
+    const { imageBase64, windowTitle, screens, panoramic, target } = req.body || {};
     const title = windowTitle || 'Pantalla de Windows';
     const timestampStr = new Date().toLocaleTimeString('es-PE', { timeZone: 'America/Lima' });
 
-    await telegram.sendPhoto(imageBuffer, `📸 <b>Captura de Pantalla en Vivo</b>\n🕒 <code>${timestampStr}</code>\n🪟 <b>Ventana activa:</b> <i>${formatters.escapeHtml(title)}</i>`);
+    // Caso A: Se recibieron múltiples pantallas y el target es "all" (álbum interactivo)
+    if (Array.isArray(screens) && screens.length > 1 && (!target || target === 'all')) {
+      const mediaItems = screens.map((s, idx) => {
+        const buffer = Buffer.from(s.imageBase64, 'base64');
+        let caption = '';
+        if (idx === 0) {
+          caption = `📸 <b>Captura en Vivo (${screens.length} Monitores)</b>\n🕒 <code>${timestampStr}</code>\n🪟 <b>Ventana activa:</b> <i>${formatters.escapeHtml(title)}</i>\n\n🖥️ <b>${formatters.escapeHtml(s.name)}</b> (${s.resolution})`;
+        } else {
+          caption = `🖥️ <b>${formatters.escapeHtml(s.name)}</b> (${s.resolution})`;
+        }
+        return {
+          type: 'photo',
+          media: { source: buffer },
+          caption,
+          parse_mode: 'HTML'
+        };
+      });
 
-    return res.json({ ok: true, delivered: true });
+      await telegram.sendMediaGroup(mediaItems);
+
+      // Enviar selector interactivo con botones
+      await telegram.broadcast(
+        `👆 <i>Álbum de ${screens.length} pantallas recibido. Puedes seleccionar abajo para ver una pantalla individual o la panorámica completa:</i>`,
+        {
+          reply_markup: keyboards.getScreenSelectKeyboard(screens).reply_markup
+        }
+      );
+
+      return res.json({ ok: true, delivered: true, count: screens.length });
+    }
+
+    // Caso B: Si target es 'panoramic' y viene la imagen panorámica completa
+    if (target === 'panoramic' && panoramic && panoramic.imageBase64) {
+      const buffer = Buffer.from(panoramic.imageBase64, 'base64');
+      const caption = `🌐 <b>Vista Panorámica Total (${panoramic.resolution || 'VirtualScreen'})</b>\n🕒 <code>${timestampStr}</code>\n🪟 <b>Ventana activa:</b> <i>${formatters.escapeHtml(title)}</i>`;
+      await telegram.sendPhoto(buffer, caption, {
+        reply_markup: keyboards.getScreenSelectKeyboard(screens).reply_markup
+      });
+      return res.json({ ok: true, delivered: true, type: 'panoramic' });
+    }
+
+    // Caso C: Pantalla individual (o única pantalla detectada)
+    const singleScreen = (Array.isArray(screens) && screens.length === 1) ? screens[0] : null;
+    const finalB64 = singleScreen ? singleScreen.imageBase64 : imageBase64;
+    const screenLabel = singleScreen ? singleScreen.name : 'Pantalla de Windows';
+    const resolutionStr = singleScreen ? ` (${singleScreen.resolution})` : '';
+
+    if (!finalB64) {
+      return res.status(400).json({ error: 'No se recibió ninguna imagen de pantalla' });
+    }
+
+    const imageBuffer = Buffer.from(finalB64, 'base64');
+    const caption = `📸 <b>Captura de ${formatters.escapeHtml(screenLabel)}${resolutionStr}</b>\n🕒 <code>${timestampStr}</code>\n🪟 <b>Ventana activa:</b> <i>${formatters.escapeHtml(title)}</i>`;
+
+    await telegram.sendPhoto(imageBuffer, caption, {
+      reply_markup: keyboards.getScreenSelectKeyboard(screens).reply_markup
+    });
+
+    return res.json({ ok: true, delivered: true, screen: screenLabel });
   } catch (err) {
-    console.error('[PC] Error recibiendo captura de pantalla:', err.message);
+    console.error('[PC] Error procesando captura de pantalla:', err.message);
     return res.status(500).json({ error: err.message });
   }
 });

@@ -50,3 +50,7 @@ desktop.ini
 .idea/
 *.sublime-project
 *.sublime-workspace
+
+# Carpeta de avances e informes locales
+avances/
+avances

@@ -45,8 +45,36 @@ function getShutdownConfirmKeyboard() {
   ]);
 }
 
+/**
+ * Teclado interactivo para seleccionar pantallas individuales o vista completa
+ */
+function getScreenSelectKeyboard(screens = []) {
+  const rows = [];
+  
+  if (Array.isArray(screens) && screens.length > 1) {
+    const screenButtons = screens.map(s => 
+      Markup.button.callback(`🖥️ P${s.index} (${s.resolution})`, `pc_shot_${s.index}`)
+    );
+    rows.push(screenButtons);
+  } else {
+    rows.push([
+      Markup.button.callback('🖥️ Pantalla 1', 'pc_shot_1'),
+      Markup.button.callback('🖥️ Pantalla 2', 'pc_shot_2'),
+      Markup.button.callback('🖥️ Pantalla 3', 'pc_shot_3')
+    ]);
+  }
+
+  rows.push([
+    Markup.button.callback('🌐 Panorámica Total', 'pc_shot_pano'),
+    Markup.button.callback('🔄 Capturar Todas', 'pc_shot_all')
+  ]);
+
+  return Markup.inlineKeyboard(rows);
+}
+
 module.exports = {
   getMainMenu,
   getPcKeyboard,
-  getShutdownConfirmKeyboard
+  getShutdownConfirmKeyboard,
+  getScreenSelectKeyboard
 };
