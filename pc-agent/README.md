@@ -44,4 +44,7 @@ Para que el agente se ejecute silenciosamente en segundo plano cada vez que inic
 1. Haz clic derecho sobre `instalar_inicio_automatico.bat` y selecciona **"Ejecutar como Administrador"**.
 2. ¡Listo! Creará una tarea programada en Windows que se ejecutará en segundo plano.
 
+Para actualizar o reiniciar el agente después de cambios de código:
+👉 Ejecuta `reiniciar_agente.bat`
+
 Si algún día deseas quitarlo, haz clic derecho sobre `desinstalar_inicio_automatico.bat` y selecciona "Ejecutar como Administrador".

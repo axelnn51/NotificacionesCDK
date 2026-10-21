@@ -61,35 +61,49 @@ router.post('/screenshot', requirePcToken, async (req, res) => {
     const title = windowTitle || 'Pantalla de Windows';
     const timestampStr = new Date().toLocaleTimeString('es-PE', { timeZone: 'America/Lima' });
 
+    // Filtrar aquellas pantallas que realmente contengan imagen
+    const screensWithImage = Array.isArray(screens) ? screens.filter(s => s && s.imageBase64) : [];
+
     // Caso A: Se recibieron múltiples pantallas y el target es "all" (álbum interactivo)
-    if (Array.isArray(screens) && screens.length > 1 && (!target || target === 'all')) {
-      const mediaItems = screens.map((s, idx) => {
+    if (screensWithImage.length > 1 && (!target || target === 'all')) {
+      const mediaItems = screensWithImage.map((s, idx) => {
         const buffer = Buffer.from(s.imageBase64, 'base64');
         let caption = '';
         if (idx === 0) {
-          caption = `📸 <b>Captura en Vivo (${screens.length} Monitores)</b>\n🕒 <code>${timestampStr}</code>\n🪟 <b>Ventana activa:</b> <i>${formatters.escapeHtml(title)}</i>\n\n🖥️ <b>${formatters.escapeHtml(s.name)}</b> (${s.resolution})`;
+          caption = `📸 <b>Captura en Vivo (${screensWithImage.length} Monitores)</b>\n🕒 <code>${timestampStr}</code>\n🪟 <b>Ventana activa:</b> <i>${formatters.escapeHtml(title)}</i>\n\n🖥️ <b>${formatters.escapeHtml(s.name)}</b> (${s.resolution})`;
         } else {
           caption = `🖥️ <b>${formatters.escapeHtml(s.name)}</b> (${s.resolution})`;
         }
         return {
           type: 'photo',
-          media: { source: buffer },
+          media: { source: buffer, filename: `monitor_${s.index || idx + 1}.jpg` },
           caption,
           parse_mode: 'HTML'
         };
       });
 
-      await telegram.sendMediaGroup(mediaItems);
+      console.log(`[PC API] Enviando álbum de ${mediaItems.length} monitores por Telegram...`);
+      const delivered = await telegram.sendMediaGroup(mediaItems);
 
-      // Enviar selector interactivo con botones
+      // Si el envío en álbum MediaGroup falla, enviar cada foto de forma individual como salvaguarda
+      if (!delivered) {
+        console.warn('[PC API] Falló envío en álbum MediaGroup, enviando fotos individuales...');
+        for (const s of screensWithImage) {
+          const buffer = Buffer.from(s.imageBase64, 'base64');
+          const caption = `🖥️ <b>${formatters.escapeHtml(s.name)}</b> (${s.resolution})\n🕒 <code>${timestampStr}</code>`;
+          await telegram.sendPhoto(buffer, caption);
+        }
+      }
+
+      // Enviar selector interactivo con botones para cambiar entre pantallas
       await telegram.broadcast(
-        `👆 <i>Álbum de ${screens.length} pantallas recibido. Puedes seleccionar abajo para ver una pantalla individual o la panorámica completa:</i>`,
+        `👆 <i>${screensWithImage.length} pantallas recibidas. Puedes seleccionar abajo para ver una individual o la panorámica completa:</i>`,
         {
           reply_markup: keyboards.getScreenSelectKeyboard(screens).reply_markup
         }
       );
 
-      return res.json({ ok: true, delivered: true, count: screens.length });
+      return res.json({ ok: true, delivered: true, count: screensWithImage.length });
     }
 
     // Caso B: Si target es 'panoramic' y viene la imagen panorámica completa
@@ -103,7 +117,7 @@ router.post('/screenshot', requirePcToken, async (req, res) => {
     }
 
     // Caso C: Pantalla individual (o única pantalla detectada)
-    const singleScreen = (Array.isArray(screens) && screens.length === 1) ? screens[0] : null;
+    const singleScreen = (screensWithImage.length === 1) ? screensWithImage[0] : null;
     const finalB64 = singleScreen ? singleScreen.imageBase64 : imageBase64;
     const screenLabel = singleScreen ? singleScreen.name : 'Pantalla de Windows';
     const resolutionStr = singleScreen ? ` (${singleScreen.resolution})` : '';

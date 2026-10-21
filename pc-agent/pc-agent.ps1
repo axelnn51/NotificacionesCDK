@@ -119,7 +119,7 @@ if (-not ([System.Management.Automation.PSTypeName]'ScreenCapturer').Type) {
                         Screen[] allScreens = Screen.AllScreens;
                         Array.Sort(allScreens, (a, b) => a.Bounds.X.CompareTo(b.Bounds.X));
 
-                        if (target == "panoramic" || target == "all") {
+                        if (target == "panoramic") {
                             Rectangle vs = SystemInformation.VirtualScreen;
                             using (Bitmap fullBmp = new Bitmap(vs.Width, vs.Height)) {
                                 using (Graphics g = Graphics.FromImage(fullBmp)) {
@@ -134,7 +134,33 @@ if (-not ([System.Management.Automation.PSTypeName]'ScreenCapturer').Type) {
                             Screen s = allScreens[i];
                             int screenNum = i + 1;
 
-                            if (target != "all" && target != "panoramic" && target != screenNum.ToString()) {
+                            string posLabel = "";
+                            if (allScreens.Length == 3) {
+                                if (i == 0) posLabel = " (Izquierda)";
+                                else if (i == 1) posLabel = " (Centro)";
+                                else if (i == 2) posLabel = " (Derecha)";
+                            } else if (allScreens.Length == 2) {
+                                if (i == 0) posLabel = " (Izquierda)";
+                                else if (i == 1) posLabel = " (Derecha)";
+                            }
+
+                            string name = "Pantalla " + screenNum + posLabel + (s.Primary ? " [Principal]" : "");
+
+                            // Si solo se pidió panorámica, guardamos los metadatos de las pantallas para los botones pero sin bitmap
+                            if (target != "all" && target != screenNum.ToString()) {
+                                if (target == "panoramic") {
+                                    result.Screens.Add(new ScreenInfo {
+                                        Index = screenNum,
+                                        DeviceName = s.DeviceName,
+                                        Name = name,
+                                        X = s.Bounds.X,
+                                        Y = s.Bounds.Y,
+                                        Width = s.Bounds.Width,
+                                        Height = s.Bounds.Height,
+                                        IsPrimary = s.Primary,
+                                        ImageBase64 = null
+                                    });
+                                }
                                 continue;
                             }
 
@@ -144,18 +170,6 @@ if (-not ([System.Management.Automation.PSTypeName]'ScreenCapturer').Type) {
                                     g.CopyFromScreen(b.Location, Point.Empty, b.Size, CopyPixelOperation.SourceCopy);
                                 }
                                 string b64 = ToJpegBase64(sBmp, 75L);
-
-                                string posLabel = "";
-                                if (allScreens.Length == 3) {
-                                    if (i == 0) posLabel = " (Izquierda)";
-                                    else if (i == 1) posLabel = " (Centro)";
-                                    else if (i == 2) posLabel = " (Derecha)";
-                                } else if (allScreens.Length == 2) {
-                                    if (i == 0) posLabel = " (Izquierda)";
-                                    else if (i == 1) posLabel = " (Derecha)";
-                                }
-
-                                string name = "Pantalla " + screenNum + posLabel + (s.Primary ? " [Principal]" : "");
 
                                 ScreenInfo si = new ScreenInfo {
                                     Index = screenNum,
@@ -178,7 +192,12 @@ if (-not ([System.Management.Automation.PSTypeName]'ScreenCapturer').Type) {
                         }
 
                         if (result.PrimaryBase64 == null && result.Screens.Count > 0) {
-                            result.PrimaryBase64 = result.Screens[0].ImageBase64;
+                            foreach (ScreenInfo si in result.Screens) {
+                                if (!string.IsNullOrEmpty(si.ImageBase64)) {
+                                    result.PrimaryBase64 = si.ImageBase64;
+                                    break;
+                                }
+                            }
                         }
                     } catch (Exception ex) {
                         result.Error = ex.Message;
@@ -429,21 +448,24 @@ while ($true) {
                     }
 
                     foreach ($s in $result.Screens) {
-                        $shotObj.screens += @{
+                        $sItem = @{
                             index = $s.Index
                             name = $s.Name
                             deviceName = $s.DeviceName
                             resolution = "$($s.Width)x$($s.Height)"
                             isPrimary = $s.IsPrimary
-                            imageBase64 = $s.ImageBase64
                         }
+                        if ($s.ImageBase64) {
+                            $sItem.imageBase64 = $s.ImageBase64
+                        }
+                        $shotObj.screens += $sItem
                     }
 
                     $shotBody = $shotObj | ConvertTo-Json -Depth 5
                     $shotBytes = [System.Text.Encoding]::UTF8.GetBytes($shotBody)
                     try {
-                        Invoke-RestMethod -Uri "$ServerUrl/api/pc/screenshot" -Method Post -Headers $Headers -ContentType "application/json; charset=utf-8" -Body $shotBytes -TimeoutSec 15 -ErrorAction SilentlyContinue
-                        Write-Host "Captura enviada con exito ($($shotObj.screens.Count) pantallas enviadas)." -ForegroundColor Green
+                        Invoke-RestMethod -Uri "$ServerUrl/api/pc/screenshot" -Method Post -Headers $Headers -ContentType "application/json; charset=utf-8" -Body $shotBytes -TimeoutSec 30 -ErrorAction Stop
+                        Write-Host "Captura enviada con exito ($($shotObj.screens.Count) pantallas reportadas)." -ForegroundColor Green
                     } catch {
                         Write-Host "Error enviando screenshot al servidor: $_" -ForegroundColor Red
                     }

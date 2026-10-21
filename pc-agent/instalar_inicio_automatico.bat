@@ -21,6 +21,8 @@ if %ERRORLEVEL% EQU 0 (
     echo Nombre de la tarea: %TASK_NAME%
     echo El agente se ejecutara en segundo plano cada vez que enciendas la PC.
     echo ====================================================================
+    echo Deteniendo instancia anterior si estuviese en ejecucion...
+    schtasks /End /TN "%TASK_NAME%" >nul 2>&1
     echo Iniciando tarea ahora mismo...
     schtasks /Run /TN "%TASK_NAME%"
 ) else (
