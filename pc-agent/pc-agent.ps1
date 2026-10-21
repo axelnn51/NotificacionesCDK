@@ -135,8 +135,8 @@ function Send-AntigravityPrompt([string]$promptText) {
         # 1. Intentar inyeccion nativa ultra-precisa por CDP (puerto 9000 de Antigravity)
         $nodeScript = Join-Path $ScriptDir "inject-prompt.js"
         if (Test-Path $nodeScript) {
-            $jsonArg = @{ text = $promptText } | ConvertTo-Json -Compress
-            $res = & node $nodeScript $jsonArg 2>&1 | Out-String
+            $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($promptText))
+            $res = & node $nodeScript "b64:$b64" 2>&1 | Out-String
             if ($res -match "SENT_OK") {
                 Write-Host "[PROMPT] Inyectado nativamente via CDP en Antigravity" -ForegroundColor Green
                 return $true

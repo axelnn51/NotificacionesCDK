@@ -10,8 +10,12 @@ if (!arg) {
 
 let promptText = '';
 try {
-  const parsed = JSON.parse(arg);
-  promptText = parsed.text || '';
+  if (arg.startsWith('b64:')) {
+    promptText = Buffer.from(arg.slice(4), 'base64').toString('utf8');
+  } else {
+    const parsed = JSON.parse(arg);
+    promptText = parsed.text || arg;
+  }
 } catch {
   promptText = arg;
 }
@@ -39,11 +43,13 @@ async function inject() {
   }, 4000);
 
   ws.onopen = () => {
-    // 1. Enfocar el input de chat Lexical de Antigravity
+    // 1. Enfocar y limpiar cualquier texto residual en el editor Lexical de Antigravity
     const expr = `(() => {
       const el = document.querySelector('div[contenteditable="true"]');
       if (!el) return false;
       el.focus();
+      document.execCommand('selectAll', false, null);
+      document.execCommand('delete', false, null);
       return true;
     })()`;
     ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression: expr, returnByValue: true } }));
