@@ -21,8 +21,9 @@ const config = {
       .filter(id => id.length > 0)
   },
 
-  // WooCommerce (Solo Lectura)
+  // WooCommerce (Opcional - Ahora delegado a YapeBot)
   woocommerce: {
+    enabled: process.env.ENABLE_WOOCOMMERCE === 'true',
     url: (process.env.WC_URL || 'https://cdkeysperu.com').replace(/\/$/, ''),
     consumerKey: process.env.WC_CONSUMER_KEY || '',
     consumerSecret: process.env.WC_CONSUMER_SECRET || '',

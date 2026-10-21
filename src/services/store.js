@@ -225,6 +225,10 @@ class Store {
     if (data.platform) this.pc.platform = data.platform;
     if (typeof data.uptimeSeconds === 'number') this.pc.uptimeSeconds = data.uptimeSeconds;
     if (data.localIp) this.pc.localIp = data.localIp;
+    if (typeof data.cpuPercent === 'number') this.pc.cpuPercent = data.cpuPercent;
+    if (typeof data.ramUsedMb === 'number') this.pc.ramUsedMb = data.ramUsedMb;
+    if (typeof data.ramTotalMb === 'number') this.pc.ramTotalMb = data.ramTotalMb;
+    if (data.activeWindow) this.pc.activeWindow = data.activeWindow;
 
     this._savePc();
   }
@@ -249,6 +253,10 @@ class Store {
       platform: this.pc.platform,
       uptimeSeconds: this.pc.uptimeSeconds,
       localIp: this.pc.localIp,
+      cpuPercent: this.pc.cpuPercent ?? null,
+      ramUsedMb: this.pc.ramUsedMb ?? null,
+      ramTotalMb: this.pc.ramTotalMb ?? null,
+      activeWindow: this.pc.activeWindow || 'N/A',
       lastHeartbeat: this.pc.lastHeartbeat,
       lastShutdownAt: this.pc.lastShutdownAt || 0,
       pendingCommand: this.pc.pendingCommand,
@@ -256,9 +264,10 @@ class Store {
     };
   }
 
-  queuePcCommand(command) {
+  queuePcCommand(command, payload = {}) {
     const commandId = `cmd_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
     this.pc.pendingCommand = command;
+    this.pc.pendingPayload = payload;
     this.pc.commandId = commandId;
     this.pc.commandIssuedAt = Date.now();
     if (command === 'shutdown') {
@@ -266,12 +275,13 @@ class Store {
       this.pc.shuttingDownAt = Date.now();
     }
     this._savePc();
-    return { commandId, command };
+    return { commandId, command, payload };
   }
 
   getPcPendingCommand() {
     return {
       command: this.pc.pendingCommand,
+      payload: this.pc.pendingPayload || {},
       commandId: this.pc.commandId
     };
   }
@@ -279,6 +289,7 @@ class Store {
   ackPcCommand(commandId, result = {}) {
     if (this.pc.commandId === commandId) {
       this.pc.pendingCommand = null;
+      this.pc.pendingPayload = null;
       this.pc.commandId = null;
       this.pc.lastAck = {
         commandId,

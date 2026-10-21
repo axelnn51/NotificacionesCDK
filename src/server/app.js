@@ -9,8 +9,8 @@ const orderMonitor = require('../services/orderMonitor');
 const app = express();
 
 // Middlewares globales
-app.use(express.json({ limit: '5mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 // Rutas principales
 app.use('/webhook', webhookRoutes);

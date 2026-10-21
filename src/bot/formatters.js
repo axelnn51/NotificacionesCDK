@@ -248,15 +248,28 @@ function formatPcStatus(pcState) {
   }
 
   if (isOnline) {
+    let statsBlock = '';
+    if (typeof pcState.cpuPercent === 'number') {
+      statsBlock += `⚡ <b>CPU:</b> ${pcState.cpuPercent}%\n`;
+    }
+    if (pcState.ramUsedMb && pcState.ramTotalMb) {
+      const ramPercent = Math.round((pcState.ramUsedMb / pcState.ramTotalMb) * 100);
+      statsBlock += `🧠 <b>RAM:</b> ${(pcState.ramUsedMb / 1024).toFixed(1)} GB / ${(pcState.ramTotalMb / 1024).toFixed(1)} GB (${ramPercent}%)\n`;
+    }
+    if (pcState.activeWindow && pcState.activeWindow !== 'N/A') {
+      statsBlock += `🪟 <b>En pantalla:</b> <i>${escapeHtml(pcState.activeWindow)}</i>\n`;
+    }
+
     return (
       `💻 <b>ESTADO DE MI EQUIPO (PC)</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
       `🟢 <b>ESTADO:</b> <b>ENCENDIDO (Online)</b>\n\n` +
       `🏷️ <b>Nombre:</b> <code>${escapeHtml(hostname)}</code>\n` +
       `🌐 <b>IP Local:</b> <code>${escapeHtml(localIp)}</code>\n` +
+      (statsBlock ? statsBlock + '\n' : '') +
       `📡 <b>Último contacto:</b> ${timeAgo}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `<i>Puedes actualizar el estado o enviar la orden de apagado directo.</i>`
+      `<i>Puedes enviar /prompt, ver pantalla o apagar el equipo.</i>`
     );
   }
 

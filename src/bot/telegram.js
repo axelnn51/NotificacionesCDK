@@ -62,11 +62,17 @@ class TelegramBotService {
     // Comando /start
     this.bot.command('start', async (ctx) => {
       const welcome = (
-        `👋 <b>¡Bienvenido al Bot de Pedidos de CDKeysPerú!</b>\n` +
+        `🚀 <b>¡Bienvenido a AxelRemoteBot!</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `🔔 <b>Notificaciones Activas:</b> Te notificaré automáticamente cada vez que ingrese un nuevo pedido o cambie de estado (Pendiente, Completado, Cancelado, etc.).\n\n` +
-        `💻 <b>Control de PC:</b> Puedes consultar si tu equipo está encendido/apagado y apagarlo directamente desde este chat.\n\n` +
-        `<i>Usa los botones inferiores para navegar rápidamente.</i>`
+        `Consola de Control Remoto de tu PC y <b>Antigravity IDE</b>.\n\n` +
+        `📸 <b>Ver Pantalla:</b> Pulsa el botón o envía /screenshot para ver tu monitor en vivo.\n` +
+        `💬 <b>/prompt &lt;orden&gt;:</b> Inyecta una solicitud a Antigravity y presiona Enter.\n` +
+        `🛑 <b>/esc:</b> Envía tecla Escape para frenar a Antigravity.\n` +
+        `✅ <b>/enter:</b> Envía Enter para aceptar o continuar.\n` +
+        `💻 <b>/pc:</b> Consulta estado, CPU, RAM y ventana activa.\n` +
+        `⚡ <b>/cmd &lt;comando&gt;:</b> Ejecuta un comando en PowerShell.\n` +
+        `🔌 <b>/apagar:</b> Apaga tu equipo Windows a distancia.\n\n` +
+        `<i>Usa los botones inferiores para operar cómodamente desde el móvil.</i>`
       );
 
       await ctx.reply(welcome, {
@@ -78,37 +84,86 @@ class TelegramBotService {
     // Comando /ayuda o botón 'ℹ️ Ayuda'
     const sendHelp = async (ctx) => {
       const helpText = (
-        `📖 <b>CENTRO DE AYUDA Y COMANDOS</b>\n` +
+        `📖 <b>COMANDOS DE CONTROL REMOTO</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `• /pedidos — Muestra los últimos 5 pedidos registrados en la tienda.\n` +
-        `• /pc o /estado — Muestra si tu equipo está Online/Offline y el botón de apagado.\n` +
-        `• /apagar — Envía la orden directa para apagar tu equipo.\n` +
-        `• /ayuda — Muestra este menú informativo.\n\n` +
-        `🛡️ <b>Seguridad:</b> Este bot opera en modo <b>SOLO LECTURA</b> sobre WooCommerce. Jamás modificará ni eliminará datos de tus clientes o productos.\n` +
-        `⚡ <b>Actualizaciones:</b> El bot consulta automáticamente pedidos nuevos cada ${config.woocommerce.pollIntervalSeconds}s.`
+        `📸 <b>/screenshot</b> o <b>/pantalla</b>\n` +
+        `   <i>Toma una captura de tus pantallas y la envía como foto.</i>\n\n` +
+        `💬 <b>/prompt &lt;tu instrucción&gt;</b>\n` +
+        `   <i>Trae al frente Antigravity, escribe el texto y le da Enter.</i>\n\n` +
+        `🛑 <b>/esc</b> o <b>/stop</b>\n` +
+        `   <i>Presiona Escape para pausar Antigravity.</i>\n\n` +
+        `✅ <b>/enter</b>\n` +
+        `   <i>Presiona Enter en Antigravity.</i>\n\n` +
+        `💻 <b>/pc</b> o <b>/stats</b>\n` +
+        `   <i>Muestra CPU %, RAM, Uptime y si la PC está Online.</i>\n\n` +
+        `⚡ <b>/cmd &lt;comando&gt;</b>\n` +
+        `   <i>Ejecuta comandos en Windows (ej: /cmd ipconfig).</i>\n\n` +
+        `🔌 <b>/apagar</b>\n` +
+        `   <i>Protocolo de apagado limpio de tu equipo.</i>`
       );
       await ctx.reply(helpText, { parse_mode: 'HTML', ...keyboards.getMainMenu() });
     };
 
     this.bot.command('ayuda', sendHelp);
+    this.bot.command('help', sendHelp);
     this.bot.hears('ℹ️ Ayuda', sendHelp);
 
-    // Comando /pedidos o botón '🛍️ Últimos Pedidos'
-    const sendRecentOrders = async (ctx) => {
-      try {
-        await ctx.reply('🔍 <i>Consultando últimos pedidos en cdkeysperu.com...</i>', { parse_mode: 'HTML' });
-        const orders = await woocommerce.getRecentOrders({ per_page: 5 });
-        const listText = formatters.formatRecentOrdersList(orders);
-        await ctx.reply(listText, { parse_mode: 'HTML', disable_web_page_preview: true });
-      } catch (err) {
-        await ctx.reply(`⚠️ Error consultando pedidos en WooCommerce: ${err.message}`);
+    // Captura de pantalla
+    const handleScreenshot = async (ctx) => {
+      const pcStatus = store.getPcStatus();
+      if (!pcStatus.online) {
+        return ctx.reply('🔴 <b>Tu PC está apagada o sin conexión.</b>\nNo se puede tomar captura de pantalla.', { parse_mode: 'HTML' });
       }
+      store.queuePcCommand('screenshot');
+      await ctx.reply('📸 <i>Solicitando captura de pantalla a tu PC... En unos segundos la recibirás.</i>', { parse_mode: 'HTML' });
     };
 
-    this.bot.command('pedidos', sendRecentOrders);
-    this.bot.hears('🛍️ Últimos Pedidos', sendRecentOrders);
+    this.bot.command('screenshot', handleScreenshot);
+    this.bot.command('pantalla', handleScreenshot);
+    this.bot.hears('📸 Ver Pantalla', handleScreenshot);
 
-    // Comando /pc, /estado o botón '💻 Estado de mi PC'
+    // Inyección de prompts a Antigravity
+    this.bot.command('prompt', async (ctx) => {
+      const text = ctx.message.text.replace(/^\/prompt\s*/i, '').trim();
+      if (!text) {
+        return ctx.reply('⚠️ <i>Debes escribir el prompt. Ej:</i> <code>/prompt refactoriza el index.js</code>', { parse_mode: 'HTML' });
+      }
+      const pcStatus = store.getPcStatus();
+      if (!pcStatus.online) {
+        return ctx.reply('🔴 <b>Tu PC está apagada o sin conexión.</b>', { parse_mode: 'HTML' });
+      }
+      store.queuePcCommand('prompt', { text });
+      await ctx.reply(`💬 <i>Inyectando prompt en Antigravity IDE...</i>\n\n📝 <b>Orden:</b> <code>${formatters.escapeHtml(text)}</code>`, { parse_mode: 'HTML' });
+    });
+
+    // Control de teclas en Antigravity
+    const handleEsc = async (ctx) => {
+      store.queuePcCommand('esc');
+      await ctx.reply('🛑 <i>Enviando Escape a Antigravity para pausar...</i>', { parse_mode: 'HTML' });
+    };
+    this.bot.command('esc', handleEsc);
+    this.bot.command('stop', handleEsc);
+
+    this.bot.command('enter', async (ctx) => {
+      store.queuePcCommand('enter');
+      await ctx.reply('✅ <i>Enviando Enter a Antigravity...</i>', { parse_mode: 'HTML' });
+    });
+
+    // Ejecutar comandos en Windows
+    this.bot.command('cmd', async (ctx) => {
+      const commandLine = ctx.message.text.replace(/^\/cmd\s*/i, '').trim();
+      if (!commandLine) {
+        return ctx.reply('⚠️ <i>Escribe: /cmd &lt;comando de powershell&gt;</i>', { parse_mode: 'HTML' });
+      }
+      const pcStatus = store.getPcStatus();
+      if (!pcStatus.online) {
+        return ctx.reply('🔴 <b>Tu PC está apagada o sin conexión.</b>', { parse_mode: 'HTML' });
+      }
+      store.queuePcCommand('cmd', { commandLine });
+      await ctx.reply(`⚡ <i>Ejecutando en Windows:</i> <code>${formatters.escapeHtml(commandLine)}</code>`, { parse_mode: 'HTML' });
+    });
+
+    // Estado de la PC
     const sendPcStatus = async (ctx) => {
       const pcStatus = store.getPcStatus();
       const statusText = formatters.formatPcStatus(pcStatus);
@@ -120,48 +175,8 @@ class TelegramBotService {
 
     this.bot.command('pc', sendPcStatus);
     this.bot.command('estado', sendPcStatus);
+    this.bot.command('stats', sendPcStatus);
     this.bot.hears('💻 Estado de mi PC', sendPcStatus);
-
-    // Comando /sync, /sincronizar o botón '🔄 Sincronizar Ahora'
-    const handleSync = async (ctx) => {
-      await ctx.reply('🔄 <i>Comprobando pedidos nuevos en la tienda...</i>', { parse_mode: 'HTML' });
-      if (typeof this.onManualSyncRequested === 'function') {
-        try {
-          const result = await this.onManualSyncRequested();
-          await ctx.reply(`✅ <i>Sincronización completada. ${result.newOrders} nuevos, ${result.statusUpdates} actualizaciones.</i>`, { parse_mode: 'HTML' });
-        } catch (err) {
-          await ctx.reply(`⚠️ Error en sincronización: ${err.message}`);
-        }
-      } else {
-        await ctx.reply('ℹ️ El monitor en segundo plano está activo y operativo.');
-      }
-    };
-
-    this.bot.command('sync', handleSync);
-    this.bot.command('sincronizar', handleSync);
-    this.bot.hears('🔄 Sincronizar Ahora', handleSync);
-
-    // Comando /test: Verifica conectividad de alertas y WooCommerce
-    this.bot.command('test', async (ctx) => {
-      try {
-        const wcTest = await woocommerce.testConnection();
-        const pcStatus = store.getPcStatus();
-        const testMsg = (
-          `🧪 <b>PRUEBA DE ESTADO DEL SISTEMA</b>\n` +
-          `━━━━━━━━━━━━━━━━━━━━━━\n` +
-          `🤖 <b>Bot Telegram:</b> Operativo ✅\n` +
-          `🛒 <b>WooCommerce:</b> ${wcTest.ok ? 'Conectado (Solo Lectura) ✅' : '⚠️ Error: ' + wcTest.error}\n` +
-          `💻 <b>Estado de PC:</b> ${pcStatus.online ? '🟢 Online' : '🔴 Offline'}\n` +
-          `📦 <b>Pedidos en base local:</b> ${store.getOrderCount()}\n` +
-          `🕒 <b>Hora Servidor:</b> ${formatters.formatDatePeru(new Date())}\n` +
-          `━━━━━━━━━━━━━━━━━━━━━━\n` +
-          `<i>Las notificaciones en tiempo real están activas.</i>`
-        );
-        await ctx.reply(testMsg, { parse_mode: 'HTML' });
-      } catch (err) {
-        await ctx.reply(`⚠️ Error en prueba: ${err.message}`);
-      }
-    });
 
     // Comando /apagar directo
     this.bot.command('apagar', async (ctx) => {
@@ -180,7 +195,13 @@ class TelegramBotService {
 
     // --- ACCIONES INLINE ---
 
-    // Refrescar estado de PC
+    this.bot.action('pc_screenshot', async (ctx) => {
+      try {
+        await ctx.answerCbQuery('Solicitando captura...');
+        await handleScreenshot(ctx);
+      } catch (err) {}
+    });
+
     this.bot.action('pc_refresh', async (ctx) => {
       try {
         await ctx.answerCbQuery('Estado actualizado');
@@ -190,12 +211,9 @@ class TelegramBotService {
           parse_mode: 'HTML',
           ...keyboards.getPcKeyboard(pcStatus.online)
         });
-      } catch (err) {
-        // Ignorar si el contenido no cambió
-      }
+      } catch (err) {}
     });
 
-    // Solicitar confirmación de apagado
     this.bot.action('pc_prompt_shutdown', async (ctx) => {
       try {
         await ctx.answerCbQuery();
@@ -210,12 +228,9 @@ class TelegramBotService {
           parse_mode: 'HTML',
           ...keyboards.getShutdownConfirmKeyboard()
         });
-      } catch (err) {
-        console.error('[Telegram] Error en prompt shutdown:', err.message);
-      }
+      } catch (err) {}
     });
 
-    // Confirmar apagado
     this.bot.action('pc_confirm_shutdown', async (ctx) => {
       try {
         await ctx.answerCbQuery('Orden de apagado enviada');
@@ -234,12 +249,9 @@ class TelegramBotService {
           parse_mode: 'HTML',
           ...keyboards.getPcKeyboard(false)
         });
-      } catch (err) {
-        console.error('[Telegram] Error en confirm shutdown:', err.message);
-      }
+      } catch (err) {}
     });
 
-    // Cancelar apagado
     this.bot.action('pc_cancel_shutdown', async (ctx) => {
       try {
         await ctx.answerCbQuery('Apagado cancelado');
@@ -249,9 +261,7 @@ class TelegramBotService {
           parse_mode: 'HTML',
           ...keyboards.getPcKeyboard(pcStatus.online)
         });
-      } catch (err) {
-        // Ignorar error si no hubo cambios
-      }
+      } catch (err) {}
     });
   }
 
@@ -343,6 +353,41 @@ class TelegramBotService {
         delivered = true;
       } catch (err) {
         console.error(`[Telegram] Error enviando mensaje a Chat ID ${chatId}:`, err.message);
+      }
+    }
+
+    return delivered;
+  }
+
+  /**
+   * Envía una foto a todos los administradores configurados
+   */
+  async sendPhoto(photoBuffer, caption = '', extra = {}) {
+    if (!this.isReady || !this.bot) {
+      console.warn('[Telegram] No se puede enviar foto, bot no inicializado.');
+      return false;
+    }
+
+    const recipients = config.telegram.adminChatIds;
+    if (!recipients || recipients.length === 0) {
+      console.warn('[Telegram] No hay ADMIN_CHAT_ID configurado para recibir fotos.');
+      return false;
+    }
+
+    const options = {
+      caption,
+      parse_mode: 'HTML',
+      ...extra
+    };
+
+    let delivered = false;
+
+    for (const chatId of recipients) {
+      try {
+        await this.bot.telegram.sendPhoto(chatId, { source: photoBuffer }, options);
+        delivered = true;
+      } catch (err) {
+        console.error(`[Telegram] Error enviando foto a Chat ID ${chatId}:`, err.message);
       }
     }
 

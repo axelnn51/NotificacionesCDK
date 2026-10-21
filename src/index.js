@@ -13,23 +13,28 @@ async function main() {
   console.log(`🔌 Puerto HTTP: ${config.port}`);
   console.log(`🛒 Tienda WooCommerce: ${config.woocommerce.url} (SOLO LECTURA)`);
 
-  // 1. Probar conexión con WooCommerce
-  try {
-    const wcTest = await woocommerce.testConnection();
-    if (wcTest.ok) {
-      console.log(`✅ WooCommerce API conectada correctamente (${wcTest.ordersCountTested} pedidos verificados).`);
-    } else {
-      console.warn(`⚠️ WooCommerce API no respondió favorablemente: ${wcTest.error}`);
+  // 1. Probar conexión con WooCommerce (solo si está habilitado)
+  if (config.woocommerce.enabled) {
+    try {
+      const wcTest = await woocommerce.testConnection();
+      if (wcTest.ok) {
+        console.log(`✅ WooCommerce API conectada correctamente (${wcTest.ordersCountTested} pedidos verificados).`);
+      } else {
+        console.warn(`⚠️ WooCommerce API no respondió favorablemente: ${wcTest.error}`);
+      }
+    } catch (err) {
+      console.warn(`⚠️ Advertencia de conexión inicial a WooCommerce: ${err.message}`);
     }
-  } catch (err) {
-    console.warn(`⚠️ Advertencia de conexión inicial a WooCommerce: ${err.message}`);
+  } else {
+    console.log('ℹ️ Modo Control Remoto Puro activo (Monitoreo de WooCommerce delegado a YapeBot).');
   }
 
   // 2. Iniciar servidor HTTP Express (para Webhooks y API de PC)
   const server = app.listen(config.port, () => {
     console.log(`🌐 Servidor HTTP escuchando en http://0.0.0.0:${config.port}`);
-    console.log(`   • Webhook: POST http://0.0.0.0:${config.port}/webhook/woocommerce`);
     console.log(`   • PC API:  POST http://0.0.0.0:${config.port}/api/pc/heartbeat`);
+    console.log(`   • Poll:    GET  http://0.0.0.0:${config.port}/api/pc/poll`);
+    console.log(`   • Shots:   POST http://0.0.0.0:${config.port}/api/pc/screenshot`);
     console.log(`   • Health:  GET  http://0.0.0.0:${config.port}/health`);
   });
 
@@ -44,11 +49,9 @@ async function main() {
     console.warn('⚠️ TELEGRAM_BOT_TOKEN no configurado. El bot de Telegram no arrancará.');
   }
 
-  // 4. Iniciar Monitor de Pedidos
-  if (woocommerce.isConfigured) {
+  // 4. Iniciar Monitor de Pedidos (solo si está habilitado)
+  if (config.woocommerce.enabled && woocommerce.isConfigured) {
     await orderMonitor.start();
-  } else {
-    console.warn('⚠️ Credenciales de WooCommerce incompletas. El monitor de pedidos no se ejecutó.');
   }
 
   console.log('====================================================');
