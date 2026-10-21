@@ -18,6 +18,10 @@ app.use('/api/pc', pcApiRoutes);
 
 // Endpoint manual de sincronización para pruebas o webhooks externos
 app.all('/api/sync', async (req, res) => {
+  const config = require('../config');
+  if (!config.woocommerce.enabled) {
+    return res.json({ ok: true, message: 'Modo Control Remoto puro activo. Notificaciones de WooCommerce delegadas a YapeBot.' });
+  }
   try {
     const result = await orderMonitor.checkOrders();
     return res.json({ ok: true, result });
@@ -28,6 +32,10 @@ app.all('/api/sync', async (req, res) => {
 
 // Endpoint para forzar reintento de pedidos no notificados
 app.all('/api/sync/missed', async (req, res) => {
+  const config = require('../config');
+  if (!config.woocommerce.enabled) {
+    return res.json({ ok: true, message: 'Modo Control Remoto puro activo. Notificaciones de WooCommerce delegadas a YapeBot.' });
+  }
   try {
     const telegram = require('../bot/telegram');
     const recent = await woocommerce.getRecentOrders({ per_page: 30, status: 'any' });

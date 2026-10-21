@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  pedidos-bot:
+  axel-remote-bot:
     build: .
-    container_name: pedidos-cdkeysperu
+    container_name: axel-remote-bot
     restart: unless-stopped
     ports:
       - "${PORT:-3005}:${PORT:-3005}"
@@ -19,15 +19,7 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - ADMIN_CHAT_ID=${ADMIN_CHAT_ID:-7233007906}
 
-      # --- WooCommerce (Solo Lectura) ---
-      - WC_URL=${WC_URL:-https://cdkeysperu.com}
-      - WC_CONSUMER_KEY=${WC_CONSUMER_KEY}
-      - WC_CONSUMER_SECRET=${WC_CONSUMER_SECRET}
-      - POLL_INTERVAL_SECONDS=${POLL_INTERVAL_SECONDS:-30}
-      - POLL_BATCH_SIZE=${POLL_BATCH_SIZE:-20}
-      - WC_WEBHOOK_SECRET=${WC_WEBHOOK_SECRET}
-
-      # --- Agente PC ---
+      # --- Agente PC Windows ---
       - PC_AGENT_TOKEN=${PC_AGENT_TOKEN}
       - PC_OFFLINE_THRESHOLD_SECONDS=${PC_OFFLINE_THRESHOLD_SECONDS:-35}
 

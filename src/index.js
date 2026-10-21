@@ -6,12 +6,11 @@ const orderMonitor = require('./services/orderMonitor');
 
 async function main() {
   console.log('====================================================');
-  console.log('🚀 INICIANDO BOT DE PEDIDOS CDKEYSPERU (PORTAINER READY)');
+  console.log('🚀 INICIANDO AXELREMOTE BOT - CONTROL REMOTO & ANTIGRAVITY');
   console.log('====================================================');
   console.log(`🌍 Entorno: ${config.env}`);
   console.log(`🕒 Zona horaria: ${config.timezone}`);
   console.log(`🔌 Puerto HTTP: ${config.port}`);
-  console.log(`🛒 Tienda WooCommerce: ${config.woocommerce.url} (SOLO LECTURA)`);
 
   // 1. Probar conexión con WooCommerce (solo si está habilitado)
   if (config.woocommerce.enabled) {
