@@ -54,3 +54,8 @@ desktop.ini
 # Carpeta de avances e informes locales
 avances/
 avances
+
+# Informes y reportes
+INFORME*.md
+INFORME_*.md
+avances/
